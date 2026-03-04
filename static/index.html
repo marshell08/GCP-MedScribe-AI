@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedScribe AI</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --panel-bg: #ffffff;
+            --primary: #2c3e50;
+            --accent: #3498db;
+            --spk1-color: #e8f4f8;
+            --spk2-color: #f0f0f0;
+            --insight-bg: #fff3cd;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto 1fr auto;
+            gap: 20px;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        header {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            margin: 0;
+            color: var(--primary);
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .transcript-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            padding-right: 10px;
+        }
+
+        .soap-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        .message {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+
+        .message.spk1 {
+            background-color: var(--spk1-color);
+            border-left: 4px solid var(--accent);
+            align-self: flex-start;
+        }
+
+        .message.spk2 {
+            background-color: var(--spk2-color);
+            border-left: 4px solid #7f8c8d;
+            align-self: flex-start;
+        }
+
+        .message.interim {
+            color: #7f8c8d;
+            font-style: italic;
+            background-color: transparent;
+            border: none;
+        }
+
+        .insight-banner {
+            grid-column: 1 / -1;
+            background: var(--insight-bg);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: bold;
+            color: #856404;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            min-height: 24px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: var(--accent);
+            color: white;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        #stopBtn {
+            background-color: #e74c3c;
+        }
+
+        #stopBtn:hover {
+            background-color: #c0392b;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h1>MedScribe AI</h1>
+        <div>
+            <button id="startBtn">Start Session</button>
+            <button id="stopBtn" disabled>End Session</button>
+        </div>
+    </header>
+
+    <div class="panel">
+        <h2>Session Transcript</h2>
+        <div class="transcript-container" id="transcript"></div>
+        <div id="interimText" class="message interim"></div>
+    </div>
+
+    <div class="panel">
+        <h2>SOAP Summary</h2>
+        <div class="soap-container" id="soapContent" style="color: grey; font-style: italic;">
+            Waiting for session to end...
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        let mediaRecorder;
+        let mediaStream;
+
+        // --- GLOBAL TELEMETRY TRAP ---
+        window.onerror = function (message, source, lineno, colno, error) {
+            const errStr = `JS Error: ${message} at ${source}:${lineno}:${colno}`;
+            console.error(errStr);
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ action: "client_error", message: errStr }));
+            }
+        };
+        window.onunhandledrejection = function (event) {
+            const errStr = `Unhandled Promise Rejection: ${event.reason}`;
+            console.error(errStr);
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ action: "client_error", message: errStr }));
+            }
+        };
+
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const transcriptDiv = document.getElementById('transcript');
+        const interimDiv = document.getElementById('interimText');
+
+        startBtn.onclick = async () => {
+            try {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                ws = new WebSocket(`${protocol}//${window.location.host}/ws/scribe`);
+
+                ws.onopen = async () => {
+                    console.log('WebSocket connected');
+                    startBtn.disabled = true;
+                    stopBtn.disabled = false;
+                    transcriptDiv.innerHTML = '';
+
+                    try {
+                        ws.send(JSON.stringify({ action: "client_error", message: "TRACE: Requesting getUserMedia" }));
+                        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        ws.send(JSON.stringify({ action: "client_error", message: "TRACE: getUserMedia success" }));
+
+                        ws.send(JSON.stringify({ action: "client_error", message: "TRACE: Creating AudioContext" }));
+                        let audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+
+                        if (audioContext.state === 'suspended') {
+                            ws.send(JSON.stringify({ action: "client_error", message: "TRACE: Resuming suspended AudioContext" }));
+                            await audioContext.resume();
+                        }
+
+                        ws.send(JSON.stringify({ action: "client_error", message: "TRACE: Creating MediaStreamSource" }));
+                        let source = audioContext.createMediaStreamSource(mediaStream);
+                        ws.send(JSON.stringify({ action: "client_error", message: "TRACE: Creating ScriptProcessor" }));
+                        let processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+                        ws.send(JSON.stringify({ action: "client_error", message: "TRACE: Connecting nodes" }));
+                        source.connect(processor);
+                        processor.connect(audioContext.destination);
+
+                        processor.onaudioprocess = (e) => {
+                            if (ws.readyState === WebSocket.OPEN) {
+                                const inputData = e.inputBuffer.getChannelData(0);
+                                const pcm16 = new Int16Array(inputData.length);
+                                for (let i = 0; i < inputData.length; i++) {
+                                    // Robust volume clipping and Float32 -> Int16 conversion
+                                    let s = Math.max(-1, Math.min(1, inputData[i]));
+                                    pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                                }
+                                // Only send if we actually have data 
+                                if (pcm16.length > 0) {
+                                    ws.send(pcm16.buffer);
+                                }
+                            }
+                        };
+
+                        mediaRecorder = {
+                            state: 'recording',
+                            stop: () => {
+                                processor.disconnect();
+                                source.disconnect();
+                                audioContext.close();
+                                console.log("Audio processing stopped.");
+                            }
+                        };
+                    } catch (err) {
+                        ws.send(JSON.stringify({ action: "client_error", message: `TRACE ERROR: ${err}` }));
+                        console.error("Mic error:", err);
+                    }
+                };
+
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'transcript') {
+                        if (data.is_final) {
+                            interimDiv.innerText = '';
+                            const p = document.createElement('div');
+                            p.className = 'message';
+                            p.innerText = data.text;
+                            transcriptDiv.appendChild(p);
+                            transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+                        } else {
+                            interimDiv.innerText = data.text;
+                        }
+                    } else if (data.type === 'final_processed') {
+                        transcriptDiv.innerHTML = '<h3 style="color:var(--accent);border-bottom:1px solid #ddd;padding-bottom:10px;">Post-Session Diarized Transcript</h3>';
+                        const diarized = document.createElement('div');
+
+                        // Gemini returns linebreaks, format them to HTML breaks
+                        diarized.innerHTML = data.diarized_transcript.replace(/\n/g, '<br>');
+                        diarized.style.lineHeight = "1.6";
+
+                        transcriptDiv.appendChild(diarized);
+
+                        // Parse the Gemini SOAP markdown into standard HTML
+                        document.getElementById('soapContent').innerHTML = marked.parse(data.soap_note);
+                    }
+                };
+            } catch (err) {
+                console.error("Error setting up connection", err);
+            }
+        };
+
+        stopBtn.onclick = () => {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+            }
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ action: "end_session" }));
+            }
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            interimDiv.innerText = '';
+        };
+    </script>
+</body>
+
+</html>
