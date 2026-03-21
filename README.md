@@ -27,7 +27,7 @@ To run this application, you must have:
 1. **Clone the repository and enter the directory:**
    ```bash
    git clone <your-repo-url>
-   cd PointClickCare
+   cd <repository-name>
    ```
 
 2. **Create a virtual environment and install dependencies:**
@@ -89,4 +89,3 @@ To run this application, you must have:
 - **`400 The medical_conversation model must have automatic punctuation enabled.`**: Ensure your `stt_config` in `main.py` has `enable_automatic_punctuation=True`.
 - **`401 UNAUTHENTICATED: API keys are not supported by this API.`**: Ensure the `GEMINI_API_KEY` in your `.env` is specifically generated from the **Google Cloud Console**, not the generic Google AI Studio portal. The backend explicitly routes the HTTP REST call to `aiplatform.googleapis.com` (Vertex AI).
 - **Silence on the UI / No Text**: Check your browser Console Logs (F12). If the WebSocket is connecting and the Microphone is capturing, ensure your Service Account JSON pathway inside `main.py` is correct. The backend STT generator will silently fail if it cannot locate the ADC token.
-# GCP-MedScribe-AI
