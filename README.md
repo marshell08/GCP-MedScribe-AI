@@ -1,12 +1,14 @@
 # MedScribe AI
 
-MedScribe AI is a real-time proof-of-concept application that captures medical conversations via a browser microphone, streams the audio to Google Cloud Speech-to-Text (STT) V2 for live transcription, and post-processes the dialogue using Vertex AI (Gemini 2.5 Flash) to generate a Speaker-Diarized transcript and a formatted Clinical SOAP Note.
+MedScribe AI is a real-time application that captures medical conversations via a browser microphone, streams the audio to Google Cloud Speech-to-Text (STT) V2 for live transcription, and leverages Gemini models to generate Speaker-Diarized dialogue breakdowns and structured Clinical SOAP Notes at the end of the session.
 
-## Architecture Overview
+## Key Features
 
-The codebase uses a Two-Step Architecture to bypass STT V2 streaming limitations:
-1. **Real-Time Transcription:** The frontend uses the `AudioContext` to continuously stream `LINEAR16` 16000Hz PCM audio over WebSockets to a FastAPI backend. The audio is routed to the Google Cloud STT V2 `medical_conversation` model to deliver ultra-fast, un-diarized live text to the UI.
-2. **Post-Session Diarization & Insights:** Upon ending the session, the monolithic transcript is sent via REST API to Vertex AI using Gemini 2.5 Flash, which intelligently re-structures the dialogue by Speaker (Doctor/Patient) and synthesizes a professional SOAP (Subjective, Objective, Assessment, Plan) Markdown note.
+- **Dynamic Model Selection**: Choose between **Chirp 3** (Advanced Multilingual) and **Chirp 2** for live transcription, and select from various **Gemini 2.5/3.1** options for post-session analytics.
+- **Edge Voice Activity Detection (VAD)**: The frontend locally calculates sound energy to pause audio transmission during silence, avoiding flooding WebSocket pipes with background noise.
+- **Stream Reconnection Loops**: The backend continuously monitors and recreates direct Speech pipes upon inactivity aborts, keeping the session uninterrupted during prolonged pauses.
+- **Dynamic Region Routing**: Automatically switches API endpoints and project region anchors depending upon the chosen model's availability footprint (e.g., fallback routing Chirp 2 into `us-central1` zone meshes).
+- **Consolidated Layout Layouts**: Redefined side-by-side splits with real-time text panels and responsive SOAP summaries at the core.
 
 ---
 
