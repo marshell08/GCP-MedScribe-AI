@@ -1,42 +1,56 @@
-import os
-import json
+"""Medical Scribe API leveraging ADK and the Multimodal Live API."""
+
 import asyncio
-import queue
+import logging
+import json
+import os
+import sys
+from pathlib import Path
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+
+from google.genai import types, Client
+from dotenv import load_dotenv
 from google.cloud import speech_v2
 from google.oauth2 import service_account
-from dotenv import load_dotenv
-import requests
-import asyncio
+
+# Load environment variables
 load_dotenv()
 
-app = FastAPI()
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    stream=sys.stdout
+)
+logger = logging.getLogger("scribe_app")
 
-os.makedirs("static", exist_ok=True)
-app.mount("/static", StaticFiles(directory="static", html=True), name="static")
 
-from fastapi.responses import RedirectResponse
-import time
 
-@app.get("/")
-async def root():
-    # Append a timestamp to break the browser cache
-    return RedirectResponse(url=f"/static/index.html?v={int(time.time())}")
+APP_NAME = "medical-scribe-live"
 
-GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
-GOOGLE_CLOUD_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION")
+# Global dictionary to persist transcripts across WebSocket reconnections
+session_transcripts = {}
 
-# Force discovery of locally generated ADC for isolated venvs
+# Google Cloud STT V2 Credentials setup
 adc_path = "/home/marshell/antigravity/gedemo-08-62f02692104f.json"
 stt_credentials = None
 if os.path.exists(adc_path):
     stt_credentials = service_account.Credentials.from_service_account_file(adc_path)
+    logger.info("Loaded Google Cloud credentials from %s", adc_path)
 
-# Required by GCP STT streaming
-speech_client = speech_v2.SpeechAsyncClient(credentials=stt_credentials)
+app = FastAPI(title="MedScribe AI")
 
-def get_speech_config():
+# Mount static files
+static_dir = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+
+
+def get_speech_config(stt_model: str):
+    """Generate Google Cloud STT V2 RecognitionConfig."""
     features = speech_v2.RecognitionFeatures(
         enable_automatic_punctuation=True,
     )
@@ -45,209 +59,254 @@ def get_speech_config():
         sample_rate_hertz=16000,
         audio_channel_count=1,
     )
+    
+    # Map frontend values to STT V2 model strings
+    # 'chirp_3' -> 'chirp-3', 'chirp_2' -> 'chirp-2'
+    model_map = {
+        "chirp_3": "chirp_3",
+        "chirp_2": "chirp_2"
+    }
+    target_model = model_map.get(stt_model, "chirp_3")
+    logger.info(f"Configuring STT model to use: {target_model}")
+
     return speech_v2.RecognitionConfig(
         explicit_decoding_config=explicit_decoding,
-        model="medical_conversation",
+        model=target_model,
         language_codes=["en-US"],
         features=features,
     )
 
-@app.websocket("/ws/scribe")
-async def websocket_endpoint(websocket: WebSocket):
+@app.get("/")
+async def root():
+    """Serve the clinical dashboard."""
+    return FileResponse(static_dir / "index.html")
+
+import queue
+import threading
+
+@app.websocket("/ws/scribe/{session_id}")
+async def scribe_websocket(websocket: WebSocket, session_id: str):
+    user_id = "default_user"
     await websocket.accept()
-    audio_queue = queue.Queue()
-    session_transcript = []
+    logger.info("WEBSOCKET CONNECTED: session_id=%s", session_id)
+
+    # Extract dynamic models from query parameters
+    query_params = websocket.query_params
+    stt_model = query_params.get("stt_model", "chirp_3")
+    llm_model = query_params.get("llm_model", "gemini-2.5-flash")
+    logger.info(f"Session {session_id} - STT Model: {stt_model}, LLM Model: {llm_model}")
+
+
     
-    # We must run STT in a separate background thread because Google Cloud's 
-    # Python async generator implementation blocks the main event loop 
-    # while waiting for the audio stream to conclude.
-    def run_stt_thread(loop, wsock, user_queue, transcript_list):
-        import time
-        from google.cloud import speech
-        
+    # Use persistent transcript to support reconnections
+    if session_id not in session_transcripts:
+        session_transcripts[session_id] = []
+    session_transcript = session_transcripts[session_id]
+
+    audio_queue = queue.Queue()
+    loop = asyncio.get_running_loop()
+
+    def run_stt_thread():
+        """Connects to Google Cloud STT V2 and streams audio from audio_queue."""
         import traceback
+        from google.cloud import speech_v2
+        logger.info(f"Starting STT V2 thread for session {session_id}")
+        
         try:
-            # Initialize SpeechClient without explicit quota_project_id to prevent 403 IAM denied
-            sync_client = speech_v2.SpeechClient(credentials=stt_credentials)
-            config = get_speech_config()
-            streaming_features = speech_v2.StreamingRecognitionFeatures(
-                interim_results=True
+            if not stt_credentials:
+                logger.error("STT Credentials not loaded. Cannot run STT.")
+                return
+
+            # Dynamic location configuration
+            if stt_model == "chirp_2":
+                target_location = "us-central1"
+                target_endpoint = "us-central1-speech.googleapis.com"
+                target_model_name = "chirp_2"
+            else:
+                target_location = "us"
+                target_endpoint = "us-speech.googleapis.com"
+                target_model_name = "chirp_3"
+
+            sync_client = speech_v2.SpeechClient(
+                credentials=stt_credentials,
+                client_options={"api_endpoint": target_endpoint}
             )
+            
+            recognizer_suffix = target_model_name.replace("_", "")
+            recognizer_id = f"medscribe-{recognizer_suffix}"
+            recognizer_str = f"projects/{os.getenv('GOOGLE_CLOUD_PROJECT')}/locations/{target_location}/recognizers/{recognizer_id}"
+            
+            try:
+                logger.info(f"Creating recognizer {recognizer_id} for model {target_model_name} in {target_location}...")
+                request = speech_v2.CreateRecognizerRequest(
+                    parent=f"projects/{os.getenv('GOOGLE_CLOUD_PROJECT')}/locations/{target_location}",
+                    recognizer_id=recognizer_id,
+                    recognizer=speech_v2.Recognizer(
+                        default_recognition_config=speech_v2.RecognitionConfig(
+                            language_codes=["en-US"],
+                            model=target_model_name
+                        )
+                    )
+                )
+                operation = sync_client.create_recognizer(request=request)
+                operation.result() # Wait for completion
+                logger.info(f"Created recognizer {recognizer_id}")
+            except Exception as e:
+                if "AlreadyExists" in str(e) or "already exists" in str(e).lower():
+                    logger.info(f"Recognizer {recognizer_id} already exists.")
+                else:
+                    logger.error(f"Failed to create recognizer: {e}")
+
+            config = get_speech_config(stt_model)
+            streaming_features = speech_v2.StreamingRecognitionFeatures(interim_results=True)
             streaming_config = speech_v2.StreamingRecognitionConfig(
                 config=config,
                 streaming_features=streaming_features
             )
+
+            stop_flag = [False] # Use a list for mutability in nested scope
             
-            # v2 explicitly requires a routing recognizer, medical defaults to global
-            recognizer_str = f"projects/{GOOGLE_CLOUD_PROJECT}/locations/global/recognizers/_"
-
-        except Exception as e:
-            print(f"STT Setup Error: {e}")
-            traceback.print_exc()
-            return
-
-        def request_generator():
-            # v2 Streaming API requires the configuration to be the very first yielded request,
-            # followed by the audio blocks in subsequent requests.
-            yield speech_v2.StreamingRecognizeRequest(
-                recognizer=recognizer_str,
-                streaming_config=streaming_config
-            )
-            while True:
+            def request_generator():
+                # Yield config first
+                yield speech_v2.StreamingRecognizeRequest(
+                    recognizer=recognizer_str,
+                    streaming_config=streaming_config
+                )
+                while True:
+                    try:
+                        chunk = audio_queue.get(timeout=0.1)
+                        if chunk is None:  # Sentinel to stop
+                            stop_flag[0] = True
+                            break
+                        yield speech_v2.StreamingRecognizeRequest(audio=chunk)
+                    except queue.Empty:
+                        continue
+                        
+            while not stop_flag[0]:
                 try:
-                    # Use a very short timeout so the GIL is frequently released
-                    chunk = user_queue.get(timeout=0.05)
-                    if chunk is None:
-                        # Client sent disconnect signal
-                        print("STT thread received disconnect signal chunk (None)")
-                        break
-                    print(f"STT generator yielding chunk of length {len(chunk)}")
-                    yield speech_v2.StreamingRecognizeRequest(audio=chunk)
-                except queue.Empty:
-                    # Explicitly yield the GIL so the main FastAPI thread can receive the WebSocket packets!
-                    time.sleep(0.01)
-                    continue
-        
-        try:
-            print("Starting Sync STT thread (v2)...")
-            responses = sync_client.streaming_recognize(
-                requests=request_generator()
-            )
-            sentence_count_since_insight = 0
-            
-            for response in responses:
-                print(f"STT Response received. results length: {len(response.results)}")
-                if not response.results:
-                    continue
-                result = response.results[0]
-                if not result.alternatives:
-                    continue
-                
-                alt = result.alternatives[0]
-                text = alt.transcript
-                print(f"Transcript: {text}, is_final: {result.is_final}")
-                
-                if result.is_final:
-                    transcript_list.append(text)
-                    asyncio.run_coroutine_threadsafe(
-                        wsock.send_json({
-                            "type": "transcript",
-                            "text": text,
-                            "is_final": True
-                        }), loop
-                    )
-                else:
-                    asyncio.run_coroutine_threadsafe(
-                        wsock.send_json({
-                            "type": "transcript",
-                            "text": text,
-                            "is_final": False
-                        }), loop
-                    )
-            print("STT thread loop completed.")
-        except Exception as e:
-            print(f"STT Error in thread: {e}")
+                    responses = sync_client.streaming_recognize(requests=request_generator())
 
-    loop = asyncio.get_event_loop()
-    import threading
-    stt_thread = threading.Thread(target=run_stt_thread, args=(loop, websocket, audio_queue, session_transcript))
-    stt_thread.daemon = True
+                    for response in responses:
+                        for result in response.results:
+                            if result.alternatives:
+                                alt = result.alternatives[0]
+                                text = alt.transcript
+                                is_final = result.is_final
+                                
+                                if is_final:
+                                    session_transcript.append(f"Speaker: {text}")
+
+                                # Push transcript back to WebSocket
+                                asyncio.run_coroutine_threadsafe(
+                                    websocket.send_json({
+                                        "type": "transcription",
+                                        "content": text,
+                                        "is_final": is_final
+                                    }),
+                                    loop
+                                )
+                except Exception as e:
+                    if "Aborted" in str(e) or "Stream timed out" in str(e):
+                        logger.info(f"STT Stream timed out (Aborted), reconnecting... Error: {e}")
+                        import time
+                        time.sleep(1)
+                        continue
+                    else:
+                        logger.error(f"STT Inner Error: {e}")
+                        raise e
+
+        except Exception as e:
+            logger.error(f"STT Thread Error in {session_id}: {e}")
+            traceback.print_exc()
+
+    stt_thread = threading.Thread(target=run_stt_thread, daemon=True)
     stt_thread.start()
 
-    try:
-        while True:
-            # Uvicorn receive format for WebSockets
-            message = await websocket.receive()
-            
-            if message["type"] == "websocket.disconnect":
-                print("WebSocket disconnect message received")
-                audio_queue.put(None)
-                break
-                
-            if "bytes" in message and message["bytes"]:
-                chunk_len = len(message["bytes"])
-                print(f"Received audio chunk of {chunk_len} bytes")
-                audio_queue.put(message["bytes"])
-            elif "text" in message and message["text"]:
-                try:
-                    data = json.loads(message["text"])
-                    if data.get("action") == "end_session":
-                        print("Ending session triggered by client")
-                        audio_queue.put(None)
-                        
-                        full_transcript = " ".join(session_transcript)
-                        print(f"Final Transcript Length: {len(full_transcript)}")
-                        
-                        prompt = f"""
-You are an expert medical scribe. I am providing you with an un-diarized transcript of a clinical encounter.
-Perform the following two tasks and return the results as a JSON object:
-1. "diarized_transcript": Split the text into a logical conversation, labeling the speakers as "Doctor:" and "Patient:". Use linebreaks block formatting.
-2. "soap_note": Generate a professional SOAP (Subjective, Objective, Assessment, Plan) note based on the encounter. Use markdown.
-If the dialogue is incomplete, formulate the SOAP as best as possible.
+    async def upstream_task():
+        """Receive audio bytes from browser and stream to both STT V2 and Gemini."""
+        try:
+            while True:
+                message = await websocket.receive()
+                if "bytes" in message:
+                    audio_bytes = message["bytes"]
+                    # logger.info(f"Received {len(audio_bytes)} audio bytes")
+                    # 1. Stream to STT V2 for UI Display
+                    audio_queue.put(audio_bytes)
+                    
 
-Raw Transcript:
-{full_transcript}
-"""                     
-                        try:
-                            # Use Vertex AI REST API to support API key authentication
-                            api_key = os.getenv("GEMINI_API_KEY")
-                            project = os.getenv("GOOGLE_CLOUD_PROJECT")
-                            location = os.getenv("GOOGLE_CLOUD_LOCATION")
+                elif "text" in message:
+                    try:
+                        message_data = json.loads(message["text"])
+                        if message_data.get("action") == "end_session":
+                            logger.info("End session requested. Triggering SOAP summary.")
                             
-                            url = f"https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google/models/gemini-2.5-flash:generateContent"
-                            headers = {
-                                "x-goog-api-key": api_key,
-                                "Content-Type": "application/json"
-                            }
-                            payload = {
-                                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                                "generationConfig": {
-                                    "responseMimeType": "application/json",
-                                    "responseSchema": {
-                                        "type": "OBJECT",
-                                        "properties": {
-                                            "diarized_transcript": {"type": "STRING"},
-                                            "soap_note": {"type": "STRING"}
-                                        }
-                                    }
-                                }
-                            }
+                            if not session_transcript:
+                                await websocket.send_json({"type": "text", "content": "No transcript available to summarize."})
+                                continue
+
+                            # Clear overriding GOOGLE_API_KEY to force GEMINI_API_KEY usage
+                            import os
+                            os.environ.pop("GOOGLE_API_KEY", None)
                             
-                            def fetch_gemini():
-                                return requests.post(url, headers=headers, json=payload, timeout=30)
-                                
-                            resp = await asyncio.to_thread(fetch_gemini)
-                            
-                            if resp.status_code == 200:
-                                result_json = resp.json()
-                                text_response = result_json["candidates"][0]["content"]["parts"][0]["text"]
-                                parsed_payload = json.loads(text_response)
-                                await websocket.send_json({
-                                    "type": "final_processed",
-                                    "diarized_transcript": parsed_payload.get("diarized_transcript", ""),
-                                    "soap_note": parsed_payload.get("soap_note", "")
-                                })
+                            is_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI") == "True"
+                            if is_vertex:
+                                client = Client(
+                                    vertexai=True,
+                                    project=os.getenv("GOOGLE_CLOUD_PROJECT"),
+                                    location=os.getenv("GOOGLE_CLOUD_LOCATION")
+                                )
                             else:
-                                print(f"GenAI HTTP Error {resp.status_code}: {resp.text}")
-                                await websocket.send_json({"action": "client_error", "message": f"GenAI API Error: {resp.status_code}"})
+                                client = Client(
+                                    api_key=os.getenv("GEMINI_API_KEY")
+                                )
+                            
+                            logger.info(f"Transcript lines: {len(session_transcript)}")
+                            full_text = "\n".join(session_transcript)
+                            logger.info(f"Full text length to summarize: {len(full_text)}")
+                            prompt = (
+                                f"Here is a medical consultation transcript:\n\n{full_text}\n\n"
+                                "Please provide the following outputs:\n"
+                                "1. **Speaker Diarization**: Reconstruct the dialogue attributing lines correctly to 'Doctor' and 'Patient' based on context.\n\n"
+                                "2. **SOAP Summary**: A professional, structured SOAP summary (Subjective, Objective, Assessment, Plan)."
+                            )
+                            
+                            try:
+                                logger.info(f"Calling generate_content with model {llm_model}...")
+                                summary_response = await asyncio.to_thread(
+                                    lambda: client.models.generate_content(
+                                        model=llm_model, # Dynamic selection
+                                        contents=prompt
+                                    )
+                                )
+                                logger.info("generate_content response received.")
                                 
-                        except Exception as ai_err:
-                            print(f"GenAI Parsing Error: {ai_err}")
-                            await websocket.send_json({"action": "client_error", "message": f"GenAI Gen Failed: {ai_err}"}) 
-                    elif data.get("action") == "client_error":
-                        print(f"\n[FRONTEND JS CRASH]: {data.get('message')}\n")
-                except json.JSONDecodeError:
-                    print(f"Failed to decode text message: {message['text']}")
-            else:
-                print(f"Unhandled websocket message format: {message}")
-    except WebSocketDisconnect:
-        print("WebSocket disconnected via exception")
-        audio_queue.put(None)
+                                if summary_response and summary_response.text:
+                                    logger.info("SOAP Summary generated successfully.")
+                                    await websocket.send_json({
+                                        "type": "text",
+                                        "content": summary_response.text
+                                    })
+                                else:
+                                    await websocket.send_json({"type": "text", "content": "Summary generation returned no text."})
+                            except Exception as e:
+                                logger.error(f"GenerateContent failed: {e}")
+                                await websocket.send_json({"type": "text", "content": f"Summary Error: {str(e)}"})
+                    except json.JSONDecodeError:
+                        pass
+        except WebSocketDisconnect:
+            logger.info("Upstream: Browser disconnected")
+        finally:
+             audio_queue.put(None) # Stop STT thread
+
+    try:
+        # Run upstream task until session ends
+        await upstream_task()
+    except Exception as e:
+        logger.error("Session Error: %s", e)
     finally:
-        # We don't need to cancel a task anymore since it is a daemon thread
-        # just cleanly terminate the queue.
-        audio_queue.put(None)
+        logger.info("Session %s closed", session_id)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(app, host="0.0.0.0", port=port)
