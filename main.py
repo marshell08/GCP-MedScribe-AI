@@ -11,7 +11,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from google.genai import types, Client
+# Unused google-genai import removed
 from dotenv import load_dotenv
 from google.cloud import speech_v2
 from google.oauth2 import service_account
