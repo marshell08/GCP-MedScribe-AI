@@ -14,13 +14,31 @@ MedScribe AI is a real-time application that captures medical conversations via 
 
 ## Prerequisites
 
-To run this application, you must have:
+To run or deploy this application, you must have:
 - **Python 3.10+**
 - **A Google Cloud Project** with the following APIs enabled:
-  - Cloud Speech-to-Text V2 API
-  - Vertex AI API (for Gemini)
-- **A Google Cloud Service Account JSON Key** (with permissions to use STT in your project).
-- **A Vertex AI API Key** (Generated from the Google Cloud Platform Console -> APIs & Services -> Credentials).
+  - `speech.googleapis.com` (Speech-to-Text V2)
+  - `aiplatform.googleapis.com` (Vertex AI API)
+  - `cloudbuild.googleapis.com` (for Cloud Run deployments)
+  - `artifactregistry.googleapis.com` (for Cloud Run deployments)
+
+---
+
+### 🔑 Required IAM Roles
+
+Depending on your execution mode, ensure the active credentials holding your session hold the following bindings:
+
+#### 💻 For Local Running (via Service Account JSON)
+The local service account (referenced in `main.py`) requires:
+- **`Speech Client`** (`roles/speech.client`) - To process live audio streams.
+
+#### 🚀 For Cloud Run Deployments (via `deploy.sh`)
+The account triggering the terminal commands requires:
+- **`Cloud Build Editor`** (`roles/cloudbuild.builds.editor`)
+- **`Storage Admin`** (`roles/storage.admin`) - To upload source triggers.
+- **`Artifact Registry Writer`** (`roles/artifactregistry.writer`) - To push compiled triggers.
+- **`Cloud Run Admin`** (`roles/run.admin`) - To allocate revision slots.
+- **`Service Account User`** (`roles/iam.serviceAccountUser`) - To bind computation identities.
 
 ---
 
