@@ -251,22 +251,8 @@ async def scribe_websocket(websocket: WebSocket, session_id: str):
                                 await websocket.send_json({"type": "text", "content": "No transcript available to summarize."})
                                 continue
 
-                            # Clear overriding GOOGLE_API_KEY to force GEMINI_API_KEY usage
-                            import os
-                            os.environ.pop("GOOGLE_API_KEY", None)
-                            
-                            is_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI") == "True"
-                            if is_vertex:
-                                client = Client(
-                                    vertexai=True,
-                                    project=os.getenv("GOOGLE_CLOUD_PROJECT"),
-                                    location=os.getenv("GOOGLE_CLOUD_LOCATION")
-                                )
-                            else:
-                                client = Client(
-                                    api_key=os.getenv("GEMINI_API_KEY")
-                                )
-                            
+                            import requests
+
                             logger.info(f"Transcript lines: {len(session_transcript)}")
                             full_text = "\n".join(session_transcript)
                             logger.info(f"Full text length to summarize: {len(full_text)}")
@@ -276,25 +262,46 @@ async def scribe_websocket(websocket: WebSocket, session_id: str):
                                 "1. **Speaker Diarization**: Reconstruct the dialogue attributing lines correctly to 'Doctor' and 'Patient' based on context.\n\n"
                                 "2. **SOAP Summary**: A professional, structured SOAP summary (Subjective, Objective, Assessment, Plan)."
                             )
-                            
+
+                            api_key = os.getenv("GEMINI_API_KEY")
+                            project = os.getenv("GOOGLE_CLOUD_PROJECT")
+                            location = os.getenv("GOOGLE_CLOUD_LOCATION")
+
+                            # Native REST API call to Vertex AI
+                            url = f"https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google/models/{llm_model}:generateContent"
+                            headers = {
+                                "x-goog-api-key": api_key,
+                                "Content-Type": "application/json"
+                            }
+                            payload = {
+                                "contents": [{"role": "user", "parts": [{"text": prompt}]}]
+                            }
+
                             try:
-                                logger.info(f"Calling generate_content with model {llm_model}...")
-                                summary_response = await asyncio.to_thread(
-                                    lambda: client.models.generate_content(
-                                        model=llm_model, # Dynamic selection
-                                        contents=prompt
-                                    )
+                                logger.info(f"Calling Vertex AI REST with model {llm_model}...")
+                                response = await asyncio.to_thread(
+                                    requests.post, url, headers=headers, json=payload
                                 )
-                                logger.info("generate_content response received.")
+                                logger.info(f"Vertex AI response status: {response.status_code}")
                                 
-                                if summary_response and summary_response.text:
-                                    logger.info("SOAP Summary generated successfully.")
-                                    await websocket.send_json({
-                                        "type": "text",
-                                        "content": summary_response.text
-                                    })
-                                else:
-                                    await websocket.send_json({"type": "text", "content": "Summary generation returned no text."})
+                                if response.status_code == 200:
+                                    resp_json = response.json()
+                                    if "candidates" in resp_json and resp_json["candidates"]:
+                                        cand = resp_json["candidates"][0]
+                                        if "content" in cand and "parts" in cand["content"]:
+                                            txt = cand["content"]["parts"][0]["text"]
+                                            await websocket.send_json({
+                                                "type": "text",
+                                                "content": txt
+                                            })
+                                            logger.info("SOAP Summary generated successfully.")
+                                            continue
+                                
+                                logger.error(f"Vertex API Error: {response.text}")
+                                await websocket.send_json({
+                                    "type": "text",
+                                    "content": f"Vertex API Error: {response.text}"
+                                })
                             except Exception as e:
                                 logger.error(f"GenerateContent failed: {e}")
                                 await websocket.send_json({"type": "text", "content": f"Summary Error: {str(e)}"})
