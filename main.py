@@ -36,16 +36,10 @@ session_transcripts = {}
 
 # Force discovery of locally generated ADC for isolated venvs
 adc_path = "/home/marshell/antigravity/gedemo-08-62f02692104f.json"
-stt_credentials = None
-if os.path.exists(adc_path):
-    print(f"Loading explicit STT credentials from {adc_path}")
-    stt_credentials = service_account.Credentials.from_service_account_file(adc_path)
-    speech_client = speech_v2.SpeechAsyncClient(credentials=stt_credentials)
-else:
-    print("No explicit ADC found; falling back to default native identity (Cloud Run)")
-    speech_client = speech_v2.SpeechAsyncClient()
+speech_client = None  # Lazy loaded inside endpoint
 
 app = FastAPI(title="MedScribe AI")
+
 
 # Mount static files
 static_dir = Path(__file__).parent / "static"
@@ -117,9 +111,12 @@ async def scribe_websocket(websocket: WebSocket, session_id: str):
         logger.info(f"Starting STT V2 thread for session {session_id}")
         
         try:
-            if not stt_credentials:
-                logger.error("STT Credentials not loaded. Cannot run STT.")
-                return
+            # Lazy Load Credentials for Native Fallbacks
+            stt_credentials = None
+            if os.path.exists(adc_path):
+                logger.info(f"Loading explicit STT credentials from {adc_path}")
+                from google.oauth2 import service_account
+                stt_credentials = service_account.Credentials.from_service_account_file(adc_path)
 
             # Dynamic location configuration
             if stt_model == "chirp_2":
@@ -131,10 +128,16 @@ async def scribe_websocket(websocket: WebSocket, session_id: str):
                 target_endpoint = "us-speech.googleapis.com"
                 target_model_name = "chirp_3"
 
-            sync_client = speech_v2.SpeechClient(
-                credentials=stt_credentials,
-                client_options={"api_endpoint": target_endpoint}
-            )
+            if stt_credentials:
+                sync_client = speech_v2.SpeechClient(
+                    credentials=stt_credentials,
+                    client_options={"api_endpoint": target_endpoint}
+                )
+            else:
+                logger.info("Using default native identity setup clients for STT processing")
+                sync_client = speech_v2.SpeechClient(
+                    client_options={"api_endpoint": target_endpoint}
+                )
             
             recognizer_suffix = target_model_name.replace("_", "")
             recognizer_id = f"medscribe-{recognizer_suffix}"
