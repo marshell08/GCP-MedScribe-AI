@@ -461,7 +461,7 @@
 
         async function setupAudioProcessing(stream) {
             audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-            await audioContext.audioWorklet.addModule('recorder-processor.js');
+            await audioContext.audioWorklet.addModule('/static/recorder-processor.js');
             source = audioContext.createMediaStreamSource(stream);
             workletNode = new AudioWorkletNode(audioContext, 'recorder-processor');
 
