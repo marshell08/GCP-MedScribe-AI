@@ -34,12 +34,16 @@ APP_NAME = "medical-scribe-live"
 # Global dictionary to persist transcripts across WebSocket reconnections
 session_transcripts = {}
 
-# Google Cloud STT V2 Credentials setup
+# Force discovery of locally generated ADC for isolated venvs
 adc_path = "/home/marshell/antigravity/gedemo-08-62f02692104f.json"
 stt_credentials = None
 if os.path.exists(adc_path):
+    print(f"Loading explicit STT credentials from {adc_path}")
     stt_credentials = service_account.Credentials.from_service_account_file(adc_path)
-    logger.info("Loaded Google Cloud credentials from %s", adc_path)
+    speech_client = speech_v2.SpeechAsyncClient(credentials=stt_credentials)
+else:
+    print("No explicit ADC found; falling back to default native identity (Cloud Run)")
+    speech_client = speech_v2.SpeechAsyncClient()
 
 app = FastAPI(title="MedScribe AI")
 
