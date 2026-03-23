@@ -86,6 +86,38 @@ To run this application, you must have:
 
 ---
 
+## Cloud Run Deployment (Serverless)
+
+You can deploy this application securely onto **Google Cloud Run** using the provided containerization wrapper and pipeline.
+
+### 🚀 Automated Deployment
+1.  **Grant Executability to your deploy script**:
+    ```bash
+    chmod +x deploy.sh
+    ```
+2.  **Execute the Pipeline**:
+    ```bash
+    ./deploy.sh
+    ```
+    This script automatically compiles your workspace into **Artifact Registry** using `gcloud builds` and allocates a managed revision slot securely.
+
+### 🛡️ Post-Deployment Authentication Setup
+Workloads in Cloud Run operate under the **Default Compute Engine Service Account**. To authorize audio stream processing, ensure that identity holds the Speech Admin API bindings:
+```bash
+gcloud projects add-iam-policy-binding [YOUR_PROJECT_ID] \
+    --member="serviceAccount:[PROJECT_NUMBER]-compute@developer.gserviceaccount.com" \
+    --role="roles/speech.admin"
+```
+
+### 🌐 Accessing Private/Protected Services
+If your Organization Policy forbids making Cloud Run endpoints fully public (`allUsers`), fire an authentication proxy forwards on your workspace shell to visit safely without standard 403 Forbidden gates:
+```bash
+gcloud run services proxy medscribe-ai --region=us-central1 --port=8080
+```
+Then visit: 👉 `http://localhost:8080`
+
+---
+
 ## Troubleshooting
 
 - **`400 The medical_conversation model must have automatic punctuation enabled.`**: Ensure your `stt_config` in `main.py` has `enable_automatic_punctuation=True`.

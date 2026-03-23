@@ -12,7 +12,7 @@ fi
 
 SERVICE_NAME="medscribe-ai"
 REGION="us-central1"
-IMAGE_TAG="gcr.io/${PROJECT_ID}/${SERVICE_NAME}:latest"
+IMAGE_TAG="${REGION}-docker.pkg.dev/${PROJECT_ID}/medscribe-repo/${SERVICE_NAME}:latest"
 
 echo "🚀 Starting deployment for Project: ${PROJECT_ID}"
 echo "-----------------------------------------------------"
