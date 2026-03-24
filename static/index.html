@@ -321,7 +321,12 @@
 
 <body>
     <header>
-        <div class="logo">MedScribe <span>AI</span></div>
+        <div style="display: flex; flex-direction: column; gap: 0.1rem;">
+            <div class="logo">MedScribe <span>AI</span></div>
+            <div style="font-size: 0.75rem; color: #64748b; font-weight: 500; letter-spacing: 0.02em;">
+                Powered by <span style="color: #4285F4; font-weight: 700;">Google Cloud</span>
+            </div>
+            </div>
         <div class="status-badge" id="statusBadge">
             <div id="statusPulse"></div>
             <span id="statusText">Ready for session</span>
