@@ -276,6 +276,46 @@
             height: 40px;
             display: none;
         }
+    .loading-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            gap: 1.5rem;
+            color: var(--primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            background: rgba(37, 99, 235, 0.05);
+            border-radius: 16px;
+            border: 1px dashed rgba(37, 99, 235, 0.2);
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .loader {
+            display: flex;
+            gap: 0.6rem;
+        }
+
+        .loader div {
+            width: 14px;
+            height: 14px;
+            background-color: var(--primary);
+            border-radius: 100%;
+            display: inline-block;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+
+        .loader .bounce1 { animation-delay: -0.32s; }
+        .loader .bounce2 { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); } 
+            40% { transform: scale(1.0); }
+        }
+
     </style>
 </head>
 
@@ -568,6 +608,18 @@
             statusBadge.classList.replace('recording', 'generating');
             statusPulse.classList.remove('pulse');
             visualizer.style.display = 'none';
+
+            soapContent.innerHTML = `
+                <div class="loading-state">
+                    <div class="loader">
+                        <div class="bounce1"></div>
+                        <div class="bounce2"></div>
+                        <div class="bounce3"></div>
+                    </div>
+                    <span>Generating Professional SOAP Summary...</span>
+                </div>
+            `;
+
             setTimeout(() => { startBtn.style.display = 'flex'; startBtn.innerText = 'New Session'; isStopping = false; }, 2000);
         }
 
