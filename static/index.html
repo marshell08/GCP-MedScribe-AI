@@ -569,30 +569,46 @@
         }
 
             let activeParagraph = null;
+                let liveCaptionBubble = null;
 
         function updateTranscript(text, className, isFinal) {
+            // Handle tentative streaming text
+            if (!isFinal) {
+                if (!liveCaptionBubble) {
+                    liveCaptionBubble = document.createElement('div');
+                    liveCaptionBubble.className = `transcript-message transcription-final`;
+                    liveCaptionBubble.style.opacity = "0.7";
+                    liveCaptionBubble.style.color = "var(--primary)";
+                    liveCaptionBubble.style.fontStyle = "italic";
+                    transcriptArea.appendChild(liveCaptionBubble);
+                }
+                liveCaptionBubble.innerText = text;
+                transcriptArea.scrollTop = transcriptArea.scrollHeight;
+                return;
+            }
+
+            // On final block, purge tentative DOM
+            if (liveCaptionBubble) {
+                liveCaptionBubble.remove();
+                liveCaptionBubble = null;
+            }
+
+            // Construct or append to permanent active paragraph
             if (!activeParagraph) {
                 activeParagraph = document.createElement('div');
                 activeParagraph.className = `transcript-message transcription-final`;
-                activeParagraph.innerHTML = `<span class="final-text"></span><span class="tentative-text" style="opacity: 0.6; color: var(--primary);"></span>`;
+                activeParagraph.innerHTML = `<span class="final-text"></span>`;
                 transcriptArea.appendChild(activeParagraph);
             }
 
             const finalTextEl = activeParagraph.querySelector('.final-text');
-            const tentativeTextEl = activeParagraph.querySelector('.tentative-text');
+            const currentFinalText = finalTextEl.innerText;
+            const spacer = (currentFinalText.length > 0 && !currentFinalText.endsWith(' ')) ? ' ' : '';
+            finalTextEl.innerText += spacer + text;
 
-            if (!isFinal) {
-                tentativeTextEl.innerText = (finalTextEl.innerText.length > 0 ? ' ' : '') + text;
-            } else {
-                tentativeTextEl.innerText = '';
-                const currentFinalText = finalTextEl.innerText;
-                const spacer = (currentFinalText.length > 0 && !currentFinalText.endsWith(' ')) ? ' ' : '';
-                finalTextEl.innerText += spacer + text;
-
-                // Break into a new paragraph box if the sentence ends with strong punctuation
-                if (text.trim().match(/[.!?]$/)) {
-                    activeParagraph = null;
-                }
+            // Break into a new paragraph box if the sentence ends with strong punctuation
+            if (text.trim().match(/[.!?]$/)) {
+                activeParagraph = null;
             }
 
             transcriptArea.scrollTop = transcriptArea.scrollHeight;
@@ -632,6 +648,7 @@
             if (ws) ws.close();
             transcriptArea.innerHTML = '';
             activeParagraph = null;
+            liveCaptionBubble = null;
 
             soapContent.innerText = 'The summary will be generated automatically at the end of the session.';
             startBtn.innerHTML = 'Start Session';
