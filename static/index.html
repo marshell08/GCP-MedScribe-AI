@@ -515,7 +515,8 @@
                         updateTranscript(data.content, 'transcription-final', data.is_final);
                     } else if (data.type === 'text') {
                         if (isStopping || data.content.includes('SOAP') || data.content.length > 500) {
-                            soapContent.innerHTML = marked.parse(data.content);
+                            let formattedContent = data.content.replace(/\*\*(Doctor|Patient|Speaker \d+):\*\*/gi, '\n\n**$1:**');
+                            soapContent.innerHTML = marked.parse(formattedContent);
                             statusText.innerText = 'Session Finished';
                             statusBadge.classList.remove('generating');
                             startBtn.style.display = 'flex';
@@ -606,7 +607,7 @@
         }
 
             let activeParagraph = null;
-                            let liveCaptionBubble = null;
+                                let liveCaptionBubble = null;
 
         function updateTranscript(text, className, isFinal) {
             // Handle tentative streaming text
