@@ -607,7 +607,7 @@
         }
 
             let activeParagraph = null;
-                                let liveCaptionBubble = null;
+                                    let liveCaptionBubble = null;
 
         function updateTranscript(text, className, isFinal) {
             // Handle tentative streaming text
@@ -669,15 +669,16 @@
             visualizer.style.display = 'none';
 
             soapContent.innerHTML = `
-                <div class="loading-state">
-                    <div class="loader">
-                        <div class="bounce1"></div>
-                        <div class="bounce2"></div>
-                        <div class="bounce3"></div>
+            <div class="skeleton-wrapper">
+                <div class="skeleton-content">
+                    <div class="bouncing-squares">
+                        <div class="square square-1"></div>
+                        <div class="square square-2"></div>
+                        <div class="square square-3"></div>
                     </div>
-                    <span>Generating Professional SOAP Summary...</span>
+                    <span>Generating Professional Clinical Documentation...</span>
                 </div>
-            `;
+            </div>`;
 
             setTimeout(() => { startBtn.style.display = 'flex'; startBtn.innerText = 'New Session'; isStopping = false; }, 2000);
         }
