@@ -12,6 +12,39 @@ MedScribe AI is a real-time application that captures medical conversations via 
 
 ---
 
+## Technical Architecture
+
+### 🎙️ Speech-to-Text (STT) Pipeline
+The application uses Google Cloud's **Speech-to-Text V2 API** for real-time streaming transcription.
+- **Audio Flow**: The browser's `AudioWorkletNode` captures microphone input at 16kHz and streams RAW PCM bytes to the FastAPI backend over a WebSocket.
+- **Configuration**:
+  - `model`: Dynamically selected between `chirp_3` (default) and `chirp_2`.
+  - `encoding`: `LINEAR16`
+  - `sample_rate_hertz`: `16000`
+  - `language_codes`: `["en-US"]`
+  - `enable_automatic_punctuation`: `True`
+- **Streaming**: The backend streams the bytes to Vertex AI using `SpeechAsyncClient.streaming_recognize`. Interim (partial) results update the UI's Live Captions floating bubble, while finalized results are appended to the permanent chat history.
+
+### 🧠 Gemini AI Pipeline
+At the end of a session, the backend gathers the finalized transcript and sends it to the **Vertex AI Gemini** models to generate a speaker-diarized breakdown and a professional clinical note.
+- **Integration**: To bypass SDK dependency conflicts in Cloud Run environments, the app makes native REST POST requests directly to the Vertex AI endpoint: `https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google/models/{llm_model}:generateContent`
+- **Dynamic Models**: Selectable between `gemini-2.5-flash` (default), `gemini-2.5-flash-lite`, `gemini-2.5-pro`, and `gemini-3.1-pro`.
+- **System Prompt**: To ensure absolute formatting compliance for Markdown UI rendering, the model is strictly prompted with the following instructions:
+
+  > "Here is a medical consultation transcript:
+  >
+  > {full_text}
+  > 
+  > Please provide the following outputs:
+  > 1. **Speaker Diarization**: Reconstruct the dialogue attributing lines correctly to 'Doctor' and 'Patient' based on context. CRITICAL: You MUST place each speaker's turn on a completely new line. Do NOT combine multiple speakers into a single paragraph. Format each turn strictly as:
+  > **Doctor:** [text]
+  > 
+  > **Patient:** [text]
+  > 
+  > 2. **Clinical Documentation**: A professional, structured SOAP summary (Subjective, Objective, Assessment, Plan)."
+
+---
+
 ## Prerequisites
 
 To run or deploy this application, you must have:
