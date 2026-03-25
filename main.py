@@ -259,7 +259,10 @@ async def scribe_websocket(websocket: WebSocket, session_id: str):
                             prompt = (
                                 f"Here is a medical consultation transcript:\n\n{full_text}\n\n"
                                 "Please provide the following outputs:\n"
-                                "1. **Speaker Diarization**: Reconstruct the dialogue attributing lines correctly to 'Doctor' and 'Patient' based on context.\n\n"
+                                "1. **Speaker Diarization**: Reconstruct the dialogue attributing lines correctly to 'Doctor' and 'Patient' based on context. "
+                                "CRITICAL: You MUST place each speaker's turn on a completely new line. Do NOT combine multiple speakers into a single paragraph. "
+                                "Format each turn strictly as:\n"
+                                "**Doctor:** [text]\n\n**Patient:** [text]\n\n"
                                 "2. **SOAP Summary**: A professional, structured SOAP summary (Subjective, Objective, Assessment, Plan)."
                             )
 
