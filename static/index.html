@@ -354,6 +354,11 @@
         }
 
         @media (max-width: 1024px) {
+            body {
+                height: auto;
+                min-height: 100vh;
+                overflow-y: auto;
+            }
             main {
                 grid-template-areas: "transcript" "soap";
                 grid-template-columns: 1fr;
@@ -362,7 +367,10 @@
                 overflow-y: visible;
                 padding: 1rem;
             }
-            .scribe-container, .soap-card {
+            .scribe-container {
+                height: 70vh;
+            }
+            .soap-card {
                 min-height: 50vh;
             }
         }
