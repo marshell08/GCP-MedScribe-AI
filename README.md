@@ -1,47 +1,38 @@
 # MedScribe AI
+**Powered by Google Cloud Agent Platform** &bull; **Author:** Marshell Rodrigues
 
-MedScribe AI is a real-time application that captures medical conversations via a browser microphone, streams the audio to Google Cloud Speech-to-Text (STT) V2 for live transcription, and leverages Gemini models to generate Speaker-Diarized dialogue breakdowns and structured Clinical SOAP Notes at the end of the session.
+MedScribe AI is a real-time and batch clinical transcription application that captures medical conversations via live microphone streaming or audio file uploads, performs speaker diarization, and leverages Gemini reasoning models to generate structured Clinical SOAP Notes.
 
 ## Key Features
 
-- **Dynamic Model Selection**: Choose between **Chirp 3** (Advanced Multilingual) and **Chirp 2** for live transcription, and select from various **Gemini 2.5/3.1** options for post-session analytics.
+- **Gemini Transcribe 3.5 Live Preview**: Real-time bidirectional streaming ASR via the Google GenAI Multimodal Live API (`gemini-3.5-transcribe-live-preview`), providing instantaneous live speech-to-text feedback.
+- **Dynamic STT Engine Selection**: Choose between **Gemini Transcribe 3.5 Live Preview**, **Chirp 3** (Advanced Multilingual), and **Chirp 2** (LLM Streaming) for live transcription.
+- **Gemini Transcribe 3.5 Preview & Multi-Model SOAP Summaries**: Automatically generates speaker diarization and structured SOAP clinical notes (Subjective, Objective, Assessment, Plan) with **Gemini Transcribe 3.5 Preview**, **Gemini 2.5 Flash**, **Gemini 3.5 Flash**, and **Gemini 2.5/3.1 Pro**.
 - **Edge Voice Activity Detection (VAD)**: The frontend locally calculates sound energy to pause audio transmission during silence, avoiding flooding WebSocket pipes with background noise.
-- **Stream Reconnection Loops**: The backend continuously monitors and recreates direct Speech pipes upon inactivity aborts, keeping the session uninterrupted during prolonged pauses.
-- **Dynamic Region Routing**: Automatically switches API endpoints and project region anchors depending upon the chosen model's availability footprint (e.g., fallback routing Chirp 2 into `us-central1` zone meshes).
-- **Consolidated Layout Layouts**: Redefined side-by-side splits with real-time text panels and responsive SOAP summaries at the core.
+- **Resilient Fallback & Reconnection**: Native streaming loops and SDK fallbacks ensure uninterrupted recording and note generation across regional endpoints.
+- **Modern Medical Dashboard**: Side-by-side split layout with animated audio visualizer, real-time live captions, and rendered Markdown clinical documentation.
 
 ---
 
 ## Technical Architecture
 
-### 🎙️ Speech-to-Text (STT) Pipeline
-The application uses Google Cloud's **Speech-to-Text V2 API** for real-time streaming transcription.
-- **Audio Flow**: The browser's `AudioWorkletNode` captures microphone input at 16kHz and streams RAW PCM bytes to the FastAPI backend over a WebSocket.
-- **Configuration**:
-  - `model`: Dynamically selected between `chirp_3` (default) and `chirp_2`.
-  - `encoding`: `LINEAR16`
-  - `sample_rate_hertz`: `16000`
-  - `language_codes`: `["en-US"]`
-  - `enable_automatic_punctuation`: `True`
-- **Streaming**: The backend streams the bytes to Vertex AI using `SpeechAsyncClient.streaming_recognize`. Interim (partial) results update the UI's Live Captions floating bubble, while finalized results are appended to the permanent chat history.
+### 🎙️ Real-Time Transcription Pipeline
+The application supports two complementary real-time streaming pipelines:
+1. **Gemini Multimodal Live API**:
+   - Audio is captured at 16kHz PCM by `AudioWorkletNode` in the browser and streamed over WebSocket.
+   - The backend streams audio to `gemini-3.5-transcribe-live-preview` via `client.aio.live.connect` with `input_audio_transcription` enabled.
+   - Interim and finalized transcription chunks are relayed back to the browser in real-time.
+2. **Google Cloud Speech-to-Text V2 API**:
+   - Dedicated streaming worker utilizing `SpeechClient.streaming_recognize` targeting `chirp_3` or `chirp_2`.
 
-### 🧠 Gemini AI Pipeline
-At the end of a session, the backend gathers the finalized transcript and sends it to the **Vertex AI Gemini** models to generate a speaker-diarized breakdown and a professional clinical note.
-- **Integration**: To bypass SDK dependency conflicts in Cloud Run environments, the app makes native REST POST requests directly to the Vertex AI endpoint: `https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google/models/{llm_model}:generateContent`
-- **Dynamic Models**: Selectable between `gemini-2.5-flash` (default), `gemini-2.5-flash-lite`, `gemini-2.5-pro`, and `gemini-3.1-pro`.
-- **System Prompt**: To ensure absolute formatting compliance for Markdown UI rendering, the model is strictly prompted with the following instructions:
-
-  > "Here is a medical consultation transcript:
-  >
-  > {full_text}
-  > 
-  > Please provide the following outputs:
-  > 1. **Speaker Diarization**: Reconstruct the dialogue attributing lines correctly to 'Doctor' and 'Patient' based on context. CRITICAL: You MUST place each speaker's turn on a completely new line. Do NOT combine multiple speakers into a single paragraph. Format each turn strictly as:
-  > **Doctor:** [text]
-  > 
-  > **Patient:** [text]
-  > 
-  > 2. **Clinical Documentation**: A professional, structured SOAP summary (Subjective, Objective, Assessment, Plan)."
+### 🧠 Gemini Clinical Intelligence & SOAP Pipeline
+At the end of a session, the backend gathers the transcript and queries the selected Gemini model:
+- **Primary Model**: `gemini-3.5-transcribe-preview` or `gemini-2.5-flash` / `gemini-3.5-flash` via the Google GenAI SDK.
+- **System Prompt**: Generates strictly formatted Speaker Diarization and comprehensive SOAP notes:
+  - **Subjective**: Chief complaint, history of present illness, patient symptoms.
+  - **Objective**: Vital signs, physical examination findings, observations.
+  - **Assessment**: Primary diagnosis and clinical reasoning.
+  - **Plan**: Diagnostic testing, prescriptions, therapies, and follow-up guidance.
 
 ---
 

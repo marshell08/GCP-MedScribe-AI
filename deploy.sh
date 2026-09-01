@@ -44,6 +44,7 @@ gcloud run deploy "$SERVICE_NAME" \
     --region "$REGION" \
     --platform managed \
     --allow-unauthenticated \
+    --service-account "pointclickcare-stt@${PROJECT_ID}.iam.gserviceaccount.com" \
     --update-env-vars "$ENV_VARS"
 
 echo "-----------------------------------------------------"

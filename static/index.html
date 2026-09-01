@@ -4,15 +4,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MedScribe AI | Real-time Medical Transcription</title>
+    <title>MedScribe AI | Real-time & Batch Audio Clinical Scribe</title>
     <link
-        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Inter:wght@400;500;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap"
         rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link rel="icon" href="data:,">
     <style>
         :root {
             --primary: #2563eb;
+            --primary-hover: #1d4ed8;
             --primary-light: #eff6ff;
             --secondary: #64748b;
             --bg: #f8fafc;
@@ -20,6 +21,8 @@
             --text: #0f172a;
             --success: #10b981;
             --danger: #ef4444;
+            --border: #e2e8f0;
+            --accent: #8b5cf6;
         }
 
         * {
@@ -41,61 +44,81 @@
         }
 
         header {
-            background: rgba(255, 255, 255, 0.8);
-            backdrop-filter: blur(10px);
-            padding: 1rem 2rem;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            padding: 0.75rem 2rem;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
             display: flex;
             justify-content: space-between;
             align-items: center;
             z-index: 10;
+            gap: 1rem;
+        }
+
+        .logo-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.1rem;
         }
 
         .logo {
             font-family: 'Outfit', sans-serif;
-            font-size: 1.5rem;
+            font-size: 1.4rem;
             font-weight: 700;
             color: var(--primary);
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.4rem;
         }
 
-        main {
-            flex: 1;
-            display: grid;
-            grid-template-areas: "transcript soap";
-            grid-template-columns: 1fr 1fr;
-            grid-template-rows: 1fr;
-            gap: 1.5rem;
-            padding: 1.5rem;
-            overflow: hidden;
+        .logo span {
+            background: linear-gradient(135deg, #2563eb, #8b5cf6);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
 
-        .scribe-container {
-            grid-area: transcript;
+        .logo-sub {
+            font-size: 0.72rem;
+            color: #64748b;
+            font-weight: 500;
+        }
+
+        /* Top Nav Mode Switcher */
+        .nav-switcher {
             display: flex;
-            flex-direction: column;
-            background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(10px);
-            border-radius: 24px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05);
-            overflow: hidden;
-            border: 1px solid rgba(255, 255, 255, 0.5);
+            background: #e2e8f0;
+            padding: 0.25rem;
+            border-radius: 12px;
+            gap: 0.25rem;
         }
 
-        .scribe-header {
-            padding: 1.5rem;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        .nav-btn {
             display: flex;
-            justify-content: space-between;
             align-items: center;
+            gap: 0.5rem;
+            padding: 0.45rem 1rem;
+            border-radius: 9px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--secondary);
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            font-family: inherit;
+        }
+
+        .nav-btn.active {
+            background: #ffffff;
+            color: var(--primary);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
         }
 
         .status-badge {
-            padding: 0.5rem 1rem;
+            padding: 0.45rem 0.9rem;
             border-radius: 9999px;
-            font-size: 0.875rem;
+            font-size: 0.82rem;
             font-weight: 600;
             display: flex;
             align-items: center;
@@ -123,36 +146,72 @@
         }
 
         @keyframes pulse {
-            0% {
-                opacity: 1;
-                transform: scale(1);
-            }
-
-            50% {
-                opacity: 0.5;
-                transform: scale(1.5);
-            }
-
-            100% {
-                opacity: 1;
-                transform: scale(1);
-            }
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(1.4); }
+            100% { opacity: 1; transform: scale(1); }
         }
 
-        .transcript-area {
+        /* Main View Container */
+        .view-panel {
             flex: 1;
-            padding: 1.5rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            padding: 1.25rem 1.75rem;
+            overflow: hidden;
+            height: calc(100vh - 65px);
+        }
+
+        .view-panel.hidden {
+            display: none !important;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.7);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .card-header {
+            padding: 1.2rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            color: var(--primary);
+        }
+
+        .card-body {
+            flex: 1;
+            padding: 1.25rem;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
             gap: 1rem;
         }
 
+        /* Live Scribe Styles */
         .transcript-message {
-            max-width: 85%;
-            padding: 1rem;
+            max-width: 90%;
+            padding: 0.85rem 1.1rem;
             border-radius: 12px;
-            font-size: 1rem;
+            font-size: 0.95rem;
+            line-height: 1.5;
         }
 
         .transcription-final {
@@ -162,195 +221,301 @@
             border-bottom-left-radius: 2px;
         }
 
-        .ai-response {
-            align-self: flex-start;
-            background: var(--primary-light);
-            color: var(--primary);
-            font-weight: 500;
+        #visualizer {
+            width: 120px;
+            height: 30px;
+            display: none;
         }
 
-        .insights-panel {
-            grid-area: insights;
-            background: linear-gradient(135deg, #2563eb, #1e40af);
-            color: white;
-            border-radius: 20px;
-            padding: 1.25rem;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        /* Batch Audio Upload Specific Styles */
+        .upload-dropzone {
+            border: 2px dashed #cbd5e1;
+            border-radius: 16px;
+            padding: 2rem 1.5rem;
+            text-align: center;
+            background: #f8fafc;
+            cursor: pointer;
+            transition: all 0.2s ease;
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
-            margin-top: 1rem;
-        }
-
-        .insights-title {
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: rgba(255, 255, 255, 0.8);
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 0.4rem;
-        }
-
-        .insights-content {
-            font-size: 1rem;
-            font-weight: 500;
-            line-height: 1.4;
-        }
-
-        .soap-card {
-            grid-area: soap;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 24px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05);
-            padding: 2rem;
-            display: flex;
-            flex-direction: column;
-            gap: 1.5rem;
-            border: 1px solid rgba(255, 255, 255, 0.5);
-            height: 100%;
-            overflow: hidden;
-        }
-
-        .soap-title {
-            font-family: 'Outfit', sans-serif;
-            font-size: 1.5rem;
-            font-weight: 700;
-            display: flex;
             align-items: center;
             gap: 0.75rem;
-            color: var(--primary);
         }
 
-        .soap-content {
-            font-size: 1rem;
-            color: #334155;
-            overflow-y: auto;
-            flex: 1;
-            padding: 0.5rem;
-            line-height: 1.6;
+        .upload-dropzone:hover,
+        .upload-dropzone.dragover {
+            border-color: var(--primary);
+            background: #eff6ff;
+            transform: scale(1.01);
+        }
+
+        .upload-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: var(--primary-light);
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .format-pills {
+            display: flex;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .pill {
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            background: #e2e8f0;
+            border-radius: 6px;
+            color: #475569;
+        }
+
+        .file-preview-card {
+            background: #f8fafc;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 1rem;
             display: flex;
             flex-direction: column;
+            gap: 0.75rem;
         }
 
-        .soap-content h1, .soap-content h2 {
-            font-size: 1.25rem;
+        .file-info-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .file-name {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .btn-sample {
+            background: #f1f5f9;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+            padding: 0.5rem 0.9rem;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-sample:hover {
+            background: #e2e8f0;
             color: var(--primary);
-            margin-top: 1.5rem;
-            margin-bottom: 0.5rem;
-            border-bottom: 2px solid var(--primary-light);
-            padding-bottom: 0.25rem;
+            border-color: var(--primary);
         }
 
-        .soap-content h3, .soap-content h4 {
-            font-size: 1.1rem;
+        /* Controls bar */
+        .controls-bar {
+            padding: 1rem 1.5rem;
+            background: #ffffff;
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .ui-row {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .control-group label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--secondary);
+        }
+
+        select {
+            padding: 0.5rem 0.75rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            font-family: inherit;
+            font-weight: 500;
+            font-size: 0.85rem;
+            background-color: #fff;
+            color: var(--text);
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        select:focus {
+            border-color: var(--primary);
+        }
+
+        .action-row {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            padding-top: 0.25rem;
+        }
+
+        button.btn-primary {
+            background: var(--primary);
+            color: white;
+            padding: 0.7rem 1.8rem;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+        }
+
+        button.btn-primary:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        button.btn-danger {
+            background: var(--danger);
+            color: white;
+            padding: 0.7rem 1.8rem;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+        }
+
+        button.btn-danger:hover {
+            filter: brightness(1.1);
+            transform: translateY(-1px);
+        }
+
+        /* SOAP & Markdown Content Rendering */
+        .markdown-rendered {
+            font-size: 0.92rem;
+            color: #334155;
+            line-height: 1.6;
+        }
+
+        .markdown-rendered h1, .markdown-rendered h2 {
+            font-size: 1.15rem;
+            color: var(--primary);
+            margin-top: 1.25rem;
+            margin-bottom: 0.4rem;
+            border-bottom: 2px solid var(--primary-light);
+            padding-bottom: 0.2rem;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .markdown-rendered h3, .markdown-rendered h4 {
+            font-size: 1rem;
             color: #1e293b;
-            margin-top: 1rem;
+            margin-top: 0.85rem;
             margin-bottom: 0.25rem;
         }
 
-        .soap-content p {
-            margin-bottom: 1rem;
+        .markdown-rendered p {
+            margin-bottom: 0.75rem;
         }
 
-        .soap-content ul, .soap-content ol {
-            margin-left: 1.5rem;
-            margin-bottom: 1rem;
+        .markdown-rendered ul, .markdown-rendered ol {
+            margin-left: 1.25rem;
+            margin-bottom: 0.75rem;
         }
 
-        .soap-content li {
-            margin-bottom: 0.35rem;
+        .markdown-rendered li {
+            margin-bottom: 0.25rem;
         }
 
-        .soap-content strong {
+        .markdown-rendered strong {
             color: #0f172a;
             font-weight: 700;
         }
 
-        .controls {
-            padding: 1.25rem;
-            background: white;
-            border-top: 1px solid rgba(0, 0, 0, 0.05);
-            display: flex;
-            justify-content: center;
-            gap: 1rem;
-        }
-
-        button {
-            padding: 0.75rem 2rem;
-            border-radius: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            border: none;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 1rem;
-        }
-
-        .btn-start {
-            background: var(--primary);
-            color: white;
-        }
-
-        .btn-stop {
-            background: var(--danger);
-            color: white;
-            display: none;
-        }
-
-        .btn-start:hover,
-        .btn-stop:hover {
-            transform: translateY(-2px);
-            filter: brightness(1.1);
-        }
-
-        #visualizer {
-            width: 100%;
-            height: 40px;
-            display: none;
-        }
-    .loading-state {
+        /* Loading Skeleton */
+        .skeleton-wrapper {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             height: 100%;
-            gap: 1.5rem;
-            color: var(--primary);
-            font-family: 'Outfit', sans-serif;
-            font-size: 1.1rem;
-            font-weight: 600;
-            background: rgba(37, 99, 235, 0.05);
-            border-radius: 16px;
-            border: 1px dashed rgba(37, 99, 235, 0.2);
+            gap: 1.25rem;
             padding: 2rem;
             text-align: center;
+            color: var(--primary);
         }
 
-        .loader {
+        .bouncing-squares {
             display: flex;
-            gap: 0.6rem;
+            gap: 0.5rem;
         }
 
-        .loader div {
-            width: 14px;
-            height: 14px;
-            background-color: var(--primary);
-            border-radius: 100%;
-            display: inline-block;
-            animation: bounce 1.4s infinite ease-in-out both;
+        .bouncing-squares .square {
+            width: 12px;
+            height: 12px;
+            background: var(--primary);
+            border-radius: 4px;
+            animation: bounce-square 1.2s infinite ease-in-out both;
         }
 
-        .loader .bounce1 { animation-delay: -0.32s; }
-        .loader .bounce2 { animation-delay: -0.16s; }
+        .square-1 { animation-delay: -0.32s; }
+        .square-2 { animation-delay: -0.16s; }
 
-        @keyframes bounce {
-            0%, 80%, 100% { transform: scale(0); } 
-            40% { transform: scale(1.0); }
+        @keyframes bounce-square {
+            0%, 80%, 100% { transform: scale(0); opacity: 0.3; }
+            40% { transform: scale(1.0); opacity: 1; }
+        }
+
+        /* Action Buttons */
+        .icon-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            padding: 0.4rem 0.75rem;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--secondary);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            transition: all 0.2s;
+        }
+
+        .icon-btn:hover {
+            background: #f1f5f9;
+            color: var(--text);
         }
 
         @media (max-width: 1024px) {
@@ -359,38 +524,10 @@
                 min-height: 100vh;
                 overflow-y: auto;
             }
-            main {
-                grid-template-areas: "transcript" "soap";
+            .view-panel {
                 grid-template-columns: 1fr;
-                grid-template-rows: auto auto;
                 height: auto;
                 overflow-y: visible;
-                padding: 1rem;
-            }
-            .scribe-container {
-                height: 70vh;
-            }
-            .soap-card {
-                min-height: 50vh;
-            }
-        }
-
-        @media (max-width: 768px) {
-            header {
-                flex-direction: column;
-                gap: 1rem;
-                padding: 1rem;
-                align-items: flex-start;
-            }
-            .ui-controls {
-                flex-direction: column;
-                align-items: stretch !important;
-            }
-            .control-group {
-                min-width: 100% !important;
-            }
-            .controls {
-                flex-direction: column;
             }
         }
     </style>
@@ -398,97 +535,236 @@
 
 <body>
     <header>
-        <div style="display: flex; flex-direction: column; gap: 0.1rem;">
-            <div class="logo">MedScribe <span>AI</span></div>
-            <div style="font-size: 0.75rem; color: #64748b; font-weight: 500; letter-spacing: 0.02em;">
-                Powered by <span style="color: #4285F4; font-weight: 700;">Google Cloud</span>
+        <div class="logo-group">
+            <div class="logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                </svg>
+                MedScribe <span>AI</span>
             </div>
+            <div class="logo-sub">
+                Powered by <span style="color: #4285F4; font-weight: 700;">Google Cloud Agent Platform</span> &bull; Author: <span style="font-weight: 600; color: #334155;">Marshell Rodrigues</span>
             </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="nav-switcher">
+            <button class="nav-btn active" id="navLive" onclick="switchMode('live')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="22" />
+                </svg>
+                Live Real-Time Scribe
+            </button>
+            <button class="nav-btn" id="navUpload" onclick="switchMode('upload')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                Batch Audio Upload
+            </button>
+        </div>
+
         <div class="status-badge" id="statusBadge">
             <div id="statusPulse"></div>
-            <span id="statusText">Ready for session</span>
+            <span id="statusText">Ready</span>
         </div>
     </header>
 
-    <main>
-        <div class="scribe-container">
-            <div class="scribe-header">
-                <h2>Session Transcript</h2>
+    <!-- VIEW 1: LIVE REAL-TIME SCRIBE -->
+    <main class="view-panel" id="liveView">
+        <!-- Live Transcript Card -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    Live Session Transcript
+                </div>
                 <canvas id="visualizer"></canvas>
             </div>
-            <div class="transcript-area" id="transcriptArea"></div>
-            <!-- Model and VAD Controls -->
-            <div class="ui-controls"
-                style="padding: 1rem 1.5rem; background: #fff; border-top: 1px solid rgba(0,0,0,0.05); display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-                <div class="control-group"
-                    style="display: flex; flex-direction: column; gap: 0.25rem; flex: 1; min-width: 200px;">
-                    <label for="sttModel"
-                        style="font-size: 0.75rem; font-weight: 600; color: var(--secondary);">Speech-to-Text Model
-                        (V2)</label>
-                    <select id="sttModel"
-                        style="padding: 0.5rem; border-radius: 8px; border: 1px solid #e2e8f0; font-family: inherit;">
-                        <option value="chirp_3">Chirp 3 (Advanced Multilingual)</option>
-                        <option value="chirp_2">Chirp 2 (LLM Streaming)</option>
-                    </select>
-                </div>
-                <div class="control-group"
-                    style="display: flex; flex-direction: column; gap: 0.25rem; flex: 1; min-width: 200px;">
-                    <label for="llmModel" style="font-size: 0.75rem; font-weight: 600; color: var(--secondary);">AI
-                        Model (Diarization & Notes)</label>
-                    <select id="llmModel"
-                        style="padding: 0.5rem; border-radius: 8px; border: 1px solid #e2e8f0; font-family: inherit;">
-                        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                        <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</option>
-                        <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                        <option value="gemini-3.1-pro">Gemini 3.1 Pro</option>
-                    </select>
-                </div>
-                <div class="control-group toggle-group"
-                    style="display: flex; align-items: center; gap: 0.5rem; margin-top: auto; padding-bottom: 0.5rem;">
-                    <input type="checkbox" id="enableVad" style="width: 1.2rem; height: 1.2rem; cursor: pointer;">
-                    <label for="enableVad"
-                        style="font-size: 0.875rem; font-weight: 500; color: var(--text); cursor: pointer;">Enable Edge
-                        VAD (Silence Trimming)</label>
+            <div class="card-body" id="transcriptArea">
+                <div style="color: #94a3b8; font-size: 0.9rem; text-align: center; margin: auto;">
+                    Click <strong>"Start Session"</strong> below to begin live medical transcription.
                 </div>
             </div>
 
-            <div class="controls">
-                <button class="btn-start" id="startBtn">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                        <line x1="12" y1="19" x2="12" y2="22" />
-                    </svg>
-                    Start Session
-                </button>
-                <button class="btn-stop" id="stopBtn">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="6" y="6" width="12" height="12" rx="2" />
-                    </svg>
-                    End Session
-                </button>
+            <div class="controls-bar">
+                <div class="ui-row">
+                    <div class="control-group">
+                        <label for="sttModel">Real-Time Transcription Engine</label>
+                        <select id="sttModel">
+                            <option value="gemini-3.5-transcribe-live-preview" selected>Gemini Transcribe 3.5 Live Preview (Multimodal Live)</option>
+                            <option value="chirp_3">Google Speech V2 - Chirp 3 (Multilingual)</option>
+                            <option value="chirp_2">Google Speech V2 - Chirp 2 (Streaming)</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="llmModel">AI Model (SOAP Notes & Diarization)</label>
+                        <select id="llmModel">
+                            <option value="gemini-3.7-flash" selected>Gemini 3.7 Flash</option>
+                            <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
+                            <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+                            <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite</option>
+                            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                            <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</option>
+                            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.4rem; padding-top: 1rem;">
+                        <input type="checkbox" id="enableVad" style="cursor: pointer;">
+                        <label for="enableVad" style="font-size: 0.8rem; font-weight: 500; cursor: pointer;">Edge VAD</label>
+                    </div>
+                </div>
+
+                <div class="action-row">
+                    <button class="btn-primary" id="startBtn">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                            <line x1="12" y1="19" x2="12" y2="22" />
+                        </svg>
+                        Start Live Session
+                    </button>
+                    <button class="btn-danger" id="stopBtn" style="display: none;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="6" y="6" width="12" height="12" rx="2" />
+                        </svg>
+                        End Session & Generate SOAP
+                    </button>
+                </div>
             </div>
         </div>
 
+        <!-- Live SOAP Summary Card -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
+                    Clinical SOAP Summary
+                </div>
+                <button class="icon-btn" onclick="copyContent('soapContent')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    Copy
+                </button>
+            </div>
+            <div class="card-body markdown-rendered" id="soapContent">
+                <div style="color: #94a3b8; font-size: 0.9rem; text-align: center; margin: auto;">
+                    SOAP clinical note and speaker diarization will be synthesized automatically when the live session ends.
+                </div>
+            </div>
+        </div>
+    </main>
 
-        <aside class="soap-card">
-            <div class="soap-title">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="16" y1="13" x2="8" y2="13" />
-                    <line x1="16" y1="17" x2="8" y2="17" />
-                    <polyline points="10 9 9 9 8 9" />
-                </svg>
-                SOAP Summary
+    <!-- VIEW 2: BATCH AUDIO FILE UPLOAD -->
+    <main class="view-panel hidden" id="uploadView">
+        <!-- Audio Upload Config Card -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 18V5l12-2v13"/>
+                        <circle cx="6" cy="18" r="3"/>
+                        <circle cx="18" cy="16" r="3"/>
+                    </svg>
+                    Upload Consultation Audio
+                </div>
+                <button class="btn-sample" onclick="loadSampleAudio()">
+                    ⚡ Try Demo Audio
+                </button>
             </div>
-            <div class="soap-content" id="soapContent">
-                The summary will be generated automatically at the end of the session.
+            <div class="card-body">
+                <!-- Dropzone -->
+                <div class="upload-dropzone" id="dropZone" onclick="document.getElementById('audioFileInput').click()">
+                    <div class="upload-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                    </div>
+                    <div style="font-weight: 600; font-size: 0.95rem;">Drag & drop audio file here or <span style="color: var(--primary);">browse</span></div>
+                    <div class="format-pills">
+                        <span class="pill">WAV</span>
+                        <span class="pill">MP3</span>
+                        <span class="pill">M4A</span>
+                        <span class="pill">FLAC</span>
+                        <span class="pill">OGG</span>
+                        <span class="pill">WebM</span>
+                    </div>
+                </div>
+                <input type="file" id="audioFileInput" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac,.webm" style="display: none;">
+
+                <!-- Selected File Preview -->
+                <div class="file-preview-card" id="filePreviewCard" style="display: none;">
+                    <div class="file-info-row">
+                        <div class="file-name" id="previewFileName">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+                            <span>recording.wav</span>
+                        </div>
+                        <span id="previewFileSize" style="font-size: 0.75rem; color: var(--secondary); font-weight: 600;"></span>
+                    </div>
+                    <audio id="audioPlayer" controls style="width: 100%; height: 36px;"></audio>
+                </div>
+
+                <div style="margin-top: auto; padding-top: 0.5rem;">
+                    <div class="control-group" style="margin-bottom: 1rem;">
+                        <label for="uploadModelSelect">AI Processing Engine (Transcription & SOAP)</label>
+                        <select id="uploadModelSelect">
+                            <option value="gemini-3.5-transcribe-preview" selected>Gemini Transcribe 3.5 Preview</option>
+                            <option value="gemini-3.7-flash">Gemini 3.7 Flash (Direct Audio Multimodal)</option>
+                            <option value="gemini-3.6-flash">Gemini 3.6 Flash (Direct Audio Multimodal)</option>
+                            <option value="gemini-3.5-flash">Gemini 3.5 Flash (Direct Audio Multimodal)</option>
+                            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Direct Audio Multimodal)</option>
+                        </select>
+                    </div>
+
+                    <button class="btn-primary" id="processAudioBtn" style="width: 100%; justify-content: center;" onclick="processUploadedAudio()">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
+                        Process Audio & Generate Clinical Notes
+                    </button>
+                </div>
             </div>
-        </aside>
+        </div>
+
+        <!-- Upload Results Card -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                        <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+                    </svg>
+                    Diarization & SOAP Documentation
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="icon-btn" onclick="copyContent('uploadResultContent')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        Copy
+                    </button>
+                </div>
+            </div>
+            <div class="card-body markdown-rendered" id="uploadResultContent">
+                <div style="color: #94a3b8; font-size: 0.9rem; text-align: center; margin: auto;">
+                    Upload a consultation recording or click <strong>"⚡ Try Demo Audio"</strong> to generate speaker diarization and SOAP summary.
+                </div>
+            </div>
+        </div>
     </main>
 
     <script>
+        // State
+        let currentMode = 'live';
         let ws;
         let audioContext;
         let source;
@@ -498,6 +774,13 @@
         let lastSpeechTime = 0;
         let isSpeaking = true;
         let mediaStream = null;
+        let selectedAudioFile = null;
+
+        // Elements
+        const liveView = document.getElementById('liveView');
+        const uploadView = document.getElementById('uploadView');
+        const navLive = document.getElementById('navLive');
+        const navUpload = document.getElementById('navUpload');
 
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
@@ -508,11 +791,38 @@
         const statusBadge = document.getElementById('statusBadge');
         const statusPulse = document.getElementById('statusPulse');
         const visualizer = document.getElementById('visualizer');
-        const canvasCtx = visualizer.getContext('2d');
+        const canvasCtx = visualizer ? visualizer.getContext('2d') : null;
         const sttModelSelect = document.getElementById('sttModel');
         const llmModelSelect = document.getElementById('llmModel');
         const enableVadCheck = document.getElementById('enableVad');
 
+        const dropZone = document.getElementById('dropZone');
+        const audioFileInput = document.getElementById('audioFileInput');
+        const filePreviewCard = document.getElementById('filePreviewCard');
+        const previewFileName = document.getElementById('previewFileName');
+        const previewFileSize = document.getElementById('previewFileSize');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const uploadModelSelect = document.getElementById('uploadModelSelect');
+        const processAudioBtn = document.getElementById('processAudioBtn');
+        const uploadResultContent = document.getElementById('uploadResultContent');
+
+        // Mode Switching
+        function switchMode(mode) {
+            currentMode = mode;
+            if (mode === 'live') {
+                liveView.classList.remove('hidden');
+                uploadView.classList.add('hidden');
+                navLive.classList.add('active');
+                navUpload.classList.remove('active');
+            } else {
+                liveView.classList.add('hidden');
+                uploadView.classList.remove('hidden');
+                navLive.classList.remove('active');
+                navUpload.classList.add('active');
+            }
+        }
+
+        // Live Audio Processing
         async function startSession() {
             try {
                 mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -521,13 +831,13 @@
                 setupAudioProcessing(mediaStream);
 
                 startBtn.style.display = 'none';
-                stopBtn.style.display = 'flex';
+                stopBtn.style.display = 'inline-flex';
                 statusText.innerText = 'Listening...';
-                statusBadge.classList.add('recording');
-                statusPulse.classList.add('pulse');
-                visualizer.style.display = 'block';
+                statusBadge.className = 'status-badge recording';
+                statusPulse.className = 'pulse';
+                if (visualizer) visualizer.style.display = 'block';
             } catch (err) {
-                alert('Mic access error: ' + err.message);
+                alert('Microphone access error: ' + err.message);
             }
         }
 
@@ -537,12 +847,10 @@
             const llmModel = llmModelSelect.value;
 
             const url = `${protocol}//${window.location.host}/ws/scribe/${currentSessionId}?stt_model=${sttModel}&llm_model=${llmModel}`;
-            console.log("Connecting to WebSocket:", url);
             ws = new WebSocket(url);
             ws.binaryType = 'arraybuffer';
 
             ws.onopen = () => {
-                console.log("WebSocket connected.");
                 if (statusText.innerText === 'Reconnecting...') {
                     statusText.innerText = 'Listening...';
                 }
@@ -552,24 +860,21 @@
                 try {
                     const data = JSON.parse(event.data);
                     if (data.type === 'transcription') {
-                        updateTranscript(data.content, 'transcription-final', data.is_final);
+                        updateTranscript(data.content, 'transcription-final', data.is_final, data.engine);
                     } else if (data.type === 'text') {
-                        if (isStopping || data.content.includes('SOAP') || data.content.length > 500) {
-                            let formattedContent = data.content.replace(/\*\*(Doctor|Patient|Speaker \d+):\*\*/gi, '\n\n**$1:**');
-                            soapContent.innerHTML = marked.parse(formattedContent);
-                            statusText.innerText = 'Session Finished';
-                            statusBadge.classList.remove('generating');
-                            startBtn.style.display = 'flex';
-                        } else {
-                            // Insights panel removed, ignoring real-time insights content update
-                        }
+                        let formattedContent = data.content.replace(/\*\*(Doctor|Patient|Speaker \d+):\*\*/gi, '\n\n**$1:**');
+                        soapContent.innerHTML = marked.parse(formattedContent);
+                        statusText.innerText = 'Completed';
+                        statusBadge.className = 'status-badge';
+                        statusPulse.className = '';
+                        startBtn.style.display = 'inline-flex';
+                        startBtn.innerText = 'New Session';
                     }
                 } catch (e) { console.error('WS parse error:', e); }
             };
 
             ws.onclose = () => {
-                console.log("WebSocket closed.");
-                if (!isStopping) {
+                if (!isStopping && currentMode === 'live') {
                     statusText.innerText = 'Reconnecting...';
                     setTimeout(() => {
                         if (!isStopping) connectWebSocket();
@@ -589,14 +894,14 @@
             workletNode = new AudioWorkletNode(audioContext, 'recorder-processor');
 
             workletNode.port.onmessage = (event) => {
-                const enableVad = enableVadCheck.checked;
+                const enableVad = enableVadCheck ? enableVadCheck.checked : false;
                 const int16Array = new Int16Array(event.data);
 
                 if (enableVad) {
                     let sum = 0;
                     for (let i = 0; i < int16Array.length; i++) sum += int16Array[i] * int16Array[i];
                     const rms = Math.sqrt(sum / int16Array.length);
-                    const threshold = 100; // Threshold for speech
+                    const threshold = 100;
 
                     if (rms > threshold) {
                         lastSpeechTime = Date.now();
@@ -606,22 +911,21 @@
                                 statusText.innerText = 'Listening...';
                             }
                         }
-                    } else if (isSpeaking && Date.now() - lastSpeechTime > 4000) { // 4s hangover
+                    } else if (isSpeaking && Date.now() - lastSpeechTime > 4000) {
                         isSpeaking = false;
                         statusText.innerText = 'Listening (Silence Trimmed)...';
                     }
                 } else {
                     isSpeaking = true;
-                    if (statusText.innerText.includes('Silence Trimmed')) {
-                        statusText.innerText = 'Listening...';
-                    }
                 }
 
                 if (isSpeaking && ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(event.data);
-                    const float32Array = new Float32Array(int16Array.length);
-                    for (let i = 0; i < int16Array.length; i++) float32Array[i] = int16Array[i] / 0x7FFF;
-                    drawVisualizer(float32Array);
+                    if (visualizer && canvasCtx) {
+                        const float32Array = new Float32Array(int16Array.length);
+                        for (let i = 0; i < int16Array.length; i++) float32Array[i] = int16Array[i] / 0x7FFF;
+                        drawVisualizer(float32Array);
+                    }
                 }
             };
 
@@ -630,15 +934,16 @@
         }
 
         function drawVisualizer(data) {
+            if (!visualizer || !canvasCtx) return;
             canvasCtx.fillStyle = 'rgba(255,255,255,0)';
             canvasCtx.clearRect(0, 0, visualizer.width, visualizer.height);
-            canvasCtx.lineWidth = 3;
+            canvasCtx.lineWidth = 2.5;
             canvasCtx.strokeStyle = '#2563eb';
             canvasCtx.beginPath();
             const sliceWidth = visualizer.width / data.length;
             let x = 0;
             for (let i = 0; i < data.length; i++) {
-                const v = data[i] * 50;
+                const v = data[i] * 35;
                 const y = visualizer.height / 2 + v;
                 if (i === 0) canvasCtx.moveTo(x, y); else canvasCtx.lineTo(x, y);
                 x += sliceWidth;
@@ -646,49 +951,40 @@
             canvasCtx.stroke();
         }
 
-            let activeParagraph = null;
-                                        let liveCaptionBubble = null;
+        let activeParagraph = null;
+        function updateTranscript(text, className, isFinal, engine) {
+            if (!text) return;
 
-        function updateTranscript(text, className, isFinal) {
-            // Handle tentative streaming text
-            if (!isFinal) {
-                if (!liveCaptionBubble) {
-                    liveCaptionBubble = document.createElement('div');
-                    liveCaptionBubble.className = `transcript-message transcription-final`;
-                    liveCaptionBubble.style.opacity = "0.7";
-                    liveCaptionBubble.style.color = "var(--primary)";
-                    liveCaptionBubble.style.fontStyle = "italic";
-                    transcriptArea.appendChild(liveCaptionBubble);
-                }
-                liveCaptionBubble.innerText = text;
-                transcriptArea.scrollTop = transcriptArea.scrollHeight;
-                return;
-            }
-
-            // On final block, purge tentative DOM
-            if (liveCaptionBubble) {
-                liveCaptionBubble.remove();
-                liveCaptionBubble = null;
-            }
-
-            // Construct or append to permanent active paragraph
             if (!activeParagraph) {
                 activeParagraph = document.createElement('div');
-                activeParagraph.className = `transcript-message transcription-final`;
-                activeParagraph.innerHTML = `<span class="final-text"></span>`;
+                activeParagraph.className = 'transcript-message transcription-final';
+                activeParagraph.innerHTML = `<span class="final-text"></span><span class="interim-text" style="color: var(--primary); font-style: italic; opacity: 0.85;"></span>`;
                 transcriptArea.appendChild(activeParagraph);
             }
 
             const finalTextEl = activeParagraph.querySelector('.final-text');
-            const currentFinalText = finalTextEl.innerText;
-            const spacer = (currentFinalText.length > 0 && !currentFinalText.endsWith(' ')) ? ' ' : '';
-            finalTextEl.innerText += spacer + text;
+            const interimTextEl = activeParagraph.querySelector('.interim-text');
 
-            // Break into a new paragraph box if the sentence ends with strong punctuation
-            if (text.trim().match(/[.!?]$/)) {
-                activeParagraph = null;
+            if (engine === 'gemini' || !engine) {
+                if (interimTextEl) interimTextEl.innerText = '';
+                const currentText = finalTextEl.innerText;
+                const needsSpace = currentText.length > 0 && !currentText.endsWith(' ') && !text.startsWith(' ') && !text.match(/^[.,!?;:'")\]]/);
+                finalTextEl.innerText += (needsSpace ? ' ' : '') + text;
+
+                if (isFinal || text.trim().match(/[.!?]$/)) {
+                    activeParagraph = null;
+                }
+            } else {
+                if (!isFinal) {
+                    interimTextEl.innerText = (finalTextEl.innerText ? ' ' : '') + text;
+                } else {
+                    interimTextEl.innerText = '';
+                    const currentText = finalTextEl.innerText;
+                    const needsSpace = currentText.length > 0 && !currentText.endsWith(' ') && !text.startsWith(' ');
+                    finalTextEl.innerText += (needsSpace ? ' ' : '') + text;
+                    activeParagraph = null;
+                }
             }
-
             transcriptArea.scrollTop = transcriptArea.scrollHeight;
         }
 
@@ -703,37 +999,153 @@
             if (mediaStream) mediaStream.getTracks().forEach(track => track.stop());
 
             stopBtn.style.display = 'none';
-            statusText.innerText = 'Analyzing session...';
-            statusBadge.classList.replace('recording', 'generating');
-            statusPulse.classList.remove('pulse');
-            visualizer.style.display = 'none';
+            statusText.innerText = 'Analyzing Session...';
+            statusBadge.className = 'status-badge generating';
+            statusPulse.className = '';
+            if (visualizer) visualizer.style.display = 'none';
 
             soapContent.innerHTML = `
             <div class="skeleton-wrapper">
-                <div class="skeleton-content">
-                    <div class="bouncing-squares">
-                        <div class="square square-1"></div>
-                        <div class="square square-2"></div>
-                        <div class="square square-3"></div>
-                    </div>
-                    <span>Generating Professional Clinical Documentation...</span>
+                <div class="bouncing-squares">
+                    <div class="square square-1"></div>
+                    <div class="square square-2"></div>
+                    <div class="square square-3"></div>
                 </div>
+                <span style="font-weight: 600; font-size: 1rem;">Synthesizing Speaker Diarization & SOAP Note...</span>
             </div>`;
 
-            setTimeout(() => { startBtn.style.display = 'flex'; startBtn.innerText = 'New Session'; isStopping = false; }, 2000);
+            setTimeout(() => { startBtn.style.display = 'inline-flex'; startBtn.innerText = 'New Session'; isStopping = false; }, 2000);
         }
 
         startBtn.onclick = () => {
             if (ws) ws.close();
             transcriptArea.innerHTML = '';
             activeParagraph = null;
-            liveCaptionBubble = null;
-
-            soapContent.innerText = 'The summary will be generated automatically at the end of the session.';
-            startBtn.innerHTML = 'Start Session';
+            soapContent.innerHTML = '<div style="color: #94a3b8; font-size: 0.9rem; text-align: center; margin: auto;">SOAP clinical note and speaker diarization will be synthesized automatically when the live session ends.</div>';
             startSession();
         };
         stopBtn.onclick = stopRecording;
+
+        // Batch Upload Event Handlers
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                handleFileSelect(e.dataTransfer.files[0]);
+            }
+        });
+
+        audioFileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        function handleFileSelect(file) {
+            selectedAudioFile = file;
+            previewFileName.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg> <span>${file.name}</span>`;
+            previewFileSize.innerText = `${(file.size / (1024 * 1024)).toFixed(2)} MB`;
+            audioPlayer.src = URL.createObjectURL(file);
+            filePreviewCard.style.display = 'flex';
+        }
+
+        async function loadSampleAudio() {
+            try {
+                statusText.innerText = 'Loading Sample...';
+                const resp = await fetch('/static/sample_consultation.wav');
+                const blob = await resp.blob();
+                const file = new File([blob], 'sample_medical_consultation.wav', { type: 'audio/wav' });
+                handleFileSelect(file);
+                statusText.innerText = 'Demo Loaded';
+            } catch (err) {
+                alert('Could not load sample audio: ' + err.message);
+            }
+        }
+
+        async function processUploadedAudio() {
+            if (!selectedAudioFile) {
+                alert('Please select or drop an audio file first, or click "⚡ Try Demo Audio".');
+                return;
+            }
+
+            const model = uploadModelSelect.value;
+            const formData = new FormData();
+            formData.append('file', selectedAudioFile);
+            formData.append('model', model);
+
+            processAudioBtn.disabled = true;
+            processAudioBtn.style.opacity = '0.7';
+            processAudioBtn.innerHTML = `
+                <div class="bouncing-squares" style="gap: 4px;">
+                    <div class="square square-1" style="width: 8px; height: 8px; background: white;"></div>
+                    <div class="square square-2" style="width: 8px; height: 8px; background: white;"></div>
+                </div>
+                Processing with ${model}...`;
+
+            statusText.innerText = `Processing with ${model}...`;
+            statusBadge.className = 'status-badge generating';
+
+            uploadResultContent.innerHTML = `
+            <div class="skeleton-wrapper">
+                <div class="bouncing-squares">
+                    <div class="square square-1"></div>
+                    <div class="square square-2"></div>
+                    <div class="square square-3"></div>
+                </div>
+                <span style="font-weight: 600; font-size: 1rem;">Transcribing audio & synthesizing clinical SOAP note with ${model}...</span>
+            </div>`;
+
+            try {
+                const response = await fetch('/api/upload-audio', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errJson = await response.json();
+                    throw new Error(errJson.detail || 'Server error occurred');
+                }
+
+                const result = await response.json();
+                let formatted = result.content.replace(/\*\*(Doctor|Patient|Speaker \d+):\*\*/gi, '\n\n**$1:**');
+                uploadResultContent.innerHTML = marked.parse(formatted);
+
+                statusText.innerText = `Done (${result.model_used})`;
+                statusBadge.className = 'status-badge';
+            } catch (err) {
+                uploadResultContent.innerHTML = `<div style="color: var(--danger); font-weight: 600; padding: 1rem;">Error: ${err.message}</div>`;
+                statusText.innerText = 'Processing Error';
+                statusBadge.className = 'status-badge recording';
+            } finally {
+                processAudioBtn.disabled = false;
+                processAudioBtn.style.opacity = '1';
+                processAudioBtn.innerHTML = `
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3"/>
+                    </svg>
+                    Process Audio & Generate Clinical Notes`;
+            }
+        }
+
+        function copyContent(elementId) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            const text = el.innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard!');
+            }).catch(err => {
+                console.error('Clipboard error:', err);
+            });
+        }
     </script>
 </body>
 
