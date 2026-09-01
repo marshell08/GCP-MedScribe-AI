@@ -7,6 +7,7 @@ import os
 import sys
 import queue
 import threading
+import base64
 from pathlib import Path
 from typing import Optional
 
@@ -15,10 +16,13 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
+import google.auth
+import google.auth.transport.requests
 from google import genai
 from google.genai import types
 from google.cloud import speech_v2
 from google.oauth2 import service_account
+import httpx
 import requests
 
 # Load environment variables
@@ -90,17 +94,27 @@ def get_speech_config(stt_model: str):
     )
 
 
-async def generate_soap_summary(llm_model: str, full_text: str) -> str:
+async def generate_soap_summary(llm_model: str, full_text: str, soap_only: bool = False) -> str:
     """Generate Diarized transcript and structured SOAP summary using Gemini."""
-    prompt = (
-        f"Here is a medical consultation transcript:\n\n{full_text}\n\n"
-        "Please provide the following outputs:\n"
-        "1. **Speaker Diarization**: Reconstruct the dialogue attributing lines correctly to 'Doctor' and 'Patient' based on context. "
-        "CRITICAL: You MUST place each speaker's turn on a completely new line. Do NOT combine multiple speakers into a single paragraph. "
-        "Format each turn strictly as:\n"
-        "**Doctor:** [text]\n\n**Patient:** [text]\n\n"
-        "2. **SOAP Summary**: A professional, structured SOAP summary (Subjective, Objective, Assessment, Plan)."
-    )
+    if soap_only:
+        prompt = (
+            f"Here is a medical consultation transcript:\n\n{full_text}\n\n"
+            "Synthesize a professional, structured clinical SOAP note:\n"
+            "- **Subjective**: Chief complaint, history of present illness (HPI), symptoms, duration, and patient remarks.\n"
+            "- **Objective**: Physical examination findings, vitals, and clinical observations.\n"
+            "- **Assessment**: Primary clinical diagnosis and differential diagnoses.\n"
+            "- **Plan**: Treatment plan, medications/prescriptions, diagnostic orders, lifestyle recommendations, and follow-up timeline."
+        )
+    else:
+        prompt = (
+            f"Here is a medical consultation transcript:\n\n{full_text}\n\n"
+            "Please provide the following outputs:\n"
+            "1. **Speaker Diarization**: Reconstruct the dialogue attributing lines correctly to 'Doctor' and 'Patient' based on context. "
+            "CRITICAL: You MUST place each speaker's turn on a completely new line. Do NOT combine multiple speakers into a single paragraph. "
+            "Format each turn strictly as:\n"
+            "**Doctor:** [text]\n\n**Patient:** [text]\n\n"
+            "2. **SOAP Summary**: A professional, structured SOAP summary (Subjective, Objective, Assessment, Plan)."
+        )
 
     location = DEFAULT_LOCATION
     target_loc = "global" if any(v in llm_model for v in ["3.5", "3.6", "3.7"]) else location
@@ -167,6 +181,75 @@ async def root():
 
 async def process_audio_upload(file_bytes: bytes, mime_type: str, model_name: str) -> dict:
     """Process recorded consultation audio with Gemini for Speaker Diarization and SOAP note."""
+    
+    # 1. Special handling for native Gemini 3.5 Transcribe Diarization
+    if model_name == "gemini-3.5-transcribe-preview":
+        try:
+            logger.info("Running native Gemini 3.5 Transcribe Diarization via Vertex AI...")
+            credentials, _ = google.auth.default()
+            auth_req = google.auth.transport.requests.Request()
+            credentials.refresh(auth_req)
+            token = credentials.token
+
+            audio_b64 = base64.b64encode(file_bytes).decode("utf-8")
+            url = "https://aiplatform.googleapis.com/v1/projects/gedemo-08/locations/global/publishers/google/models/gemini-3.5-transcribe-preview:generateContent"
+            payload = {
+                "contents": [
+                    {"role": "user", "parts": [{"inlineData": {"mimeType": mime_type, "data": audio_b64}}]}
+                ],
+                "generationConfig": {
+                    "audioTranscriptionConfig": {
+                        "diarization": True,
+                        "languageCodes": ["en-US"]
+                    }
+                }
+            }
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            }
+
+            async with httpx.AsyncClient(timeout=90.0) as http_client:
+                resp = await http_client.post(url, headers=headers, json=payload)
+                if resp.status_code == 200:
+                    resp_json = resp.json()
+                    parts = resp_json.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+                    diarized_lines = []
+                    for p in parts:
+                        at = p.get("audioTranscription", {})
+                        spk = at.get("speakerLabel", "")
+                        text = at.get("text", p.get("text", "")).strip()
+                        if text:
+                            speaker_tag = "Doctor" if spk == "spk:0" else ("Patient" if spk == "spk:1" else ("Speaker " + spk.replace("spk:", "")))
+                            diarized_lines.append(f"**{speaker_tag}:** {text}")
+                    
+                    native_transcript = "\n\n".join(diarized_lines)
+                    
+                    # Generate SOAP note using Gemini Flash from the native diarized transcript
+                    soap_note = await generate_soap_summary(
+                        llm_model="gemini-3.7-flash", 
+                        full_text=native_transcript,
+                        soap_only=True
+                    )
+                    
+                    combined_output = (
+                        f"### 1. Speaker Diarized Transcript (Native Gemini 3.5 Transcribe Diarization)\n\n"
+                        f"{native_transcript}\n\n"
+                        f"---\n\n"
+                        f"{soap_note}"
+                    )
+                    
+                    return {
+                        "status": "success",
+                        "model_used": "gemini-3.5-transcribe-preview (Native Diarization) + gemini-3.7-flash",
+                        "content": combined_output
+                    }
+                else:
+                    logger.warning(f"Native transcribe failed with {resp.status_code}: {resp.text}")
+        except Exception as native_err:
+            logger.warning(f"Native transcribe exception: {native_err}. Falling back to standard pipeline...")
+
+    # 2. Multimodal LLM pipeline
     prompt = (
         "You are an expert AI clinical documentation assistant.\n"
         "Listen carefully to this recorded medical consultation and generate the following structured outputs:\n\n"
@@ -183,14 +266,13 @@ async def process_audio_upload(file_bytes: bytes, mime_type: str, model_name: st
         "- **Plan**: Treatment plan, medications/prescriptions, diagnostic orders, lifestyle recommendations, and follow-up timeline."
     )
 
-    # Resolve target model
     target_model = model_name
     if target_model == "gemini-3.5-transcribe-preview":
         target_model = "gemini-3.7-flash"
 
     target_loc = "global" if any(v in target_model for v in ["3.5", "3.6", "3.7"]) else DEFAULT_LOCATION
 
-    # 1. Primary generation call
+    # Primary multimodal generation call
     try:
         client = get_genai_client(location=target_loc)
         logger.info(f"Processing audio upload ({len(file_bytes)} bytes, {mime_type}) using model {target_model} in {target_loc}...")
@@ -211,7 +293,7 @@ async def process_audio_upload(file_bytes: bytes, mime_type: str, model_name: st
     except Exception as e:
         logger.warning(f"Audio processing with {target_model} failed: {e}. Trying fallback...")
 
-    # 2. Fallbacks
+    # Fallbacks
     for fb_model in ["gemini-3.7-flash", "gemini-3.5-flash", "gemini-2.5-flash"]:
         if fb_model == target_model:
             continue
