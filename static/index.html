@@ -658,6 +658,139 @@
             color: #065f46;
         }
 
+        /* Developer Code Snippet Box */
+        .code-toggle-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            padding: 0.35rem 0.75rem;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #334155;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 0.5rem;
+        }
+
+        .code-toggle-btn:hover {
+            background: #f1f5f9;
+            border-color: #94a3b8;
+            color: #0f172a;
+        }
+
+        .code-snippet-box {
+            margin-top: 0.6rem;
+            background: #0f172a;
+            border-radius: 10px;
+            border: 1px solid #334155;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            display: none;
+            text-align: left;
+        }
+
+        .code-snippet-box.open {
+            display: block;
+            animation: fadeIn 0.25s ease-in-out;
+        }
+
+        .code-snippet-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.45rem 0.85rem;
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+
+        .code-snippet-title {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-weight: 600;
+            color: #f8fafc;
+        }
+
+        .code-badge {
+            background: #0284c7;
+            color: white;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            font-weight: 700;
+        }
+
+        .code-pre {
+            margin: 0;
+            padding: 0.85rem;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+            font-size: 0.75rem;
+            line-height: 1.45;
+            color: #e2e8f0;
+            overflow-x: auto;
+            white-space: pre;
+            max-height: 260px;
+            scrollbar-width: thin;
+        }
+
+        .code-copy-btn {
+            background: #334155;
+            border: 1px solid #475569;
+            color: #f8fafc;
+            border-radius: 5px;
+            padding: 2px 8px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            transition: all 0.15s;
+        }
+
+        .code-copy-btn:hover {
+            background: #475569;
+        }
+
+        /* Word-Level Audio Timestamp Badges */
+        .timestamp-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            background: #eef2ff;
+            border: 1px solid #c7d2fe;
+            color: #4338ca;
+            font-size: 0.74rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace, sans-serif;
+            padding: 1px 7px;
+            border-radius: 6px;
+            cursor: pointer;
+            vertical-align: middle;
+            margin: 0 3px 2px 3px;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 1px 2px rgba(67, 56, 202, 0.08);
+            user-select: none;
+        }
+
+        .timestamp-chip:hover {
+            background: #4338ca;
+            color: #ffffff;
+            border-color: #3730a3;
+            transform: translateY(-1px);
+            box-shadow: 0 3px 8px rgba(67, 56, 202, 0.25);
+        }
+
+        .timestamp-chip:active {
+            transform: translateY(0);
+            box-shadow: 0 1px 2px rgba(67, 56, 202, 0.15);
+        }
+
         @media (max-width: 1024px) {
             body {
                 height: auto;
@@ -865,7 +998,7 @@
                 </div>
 
                 <div style="margin-top: auto; padding-top: 0.5rem;">
-                    <div class="control-group" style="margin-bottom: 0.75rem;">
+                    <div class="control-group" style="margin-bottom: 0.5rem;">
                         <label for="uploadModelSelect">AI Processing Engine (Transcription & SOAP)</label>
                         <select id="uploadModelSelect" onchange="updateUploadPipelineInfo()">
                             <option value="gemini-3.5-transcribe-preview" selected>Gemini Transcribe 3.5 Preview (Dedicated ASR + Diarization)</option>
@@ -874,6 +1007,15 @@
                             <option value="gemini-3.5-flash">Gemini 3.5 Flash (Direct Audio Multimodal)</option>
                             <option value="gemini-2.5-flash">Gemini 2.5 Flash (Direct Audio Multimodal)</option>
                         </select>
+                    </div>
+
+                    <!-- Word-level Timestamps Toggle -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.35rem 0.2rem; margin-bottom: 0.4rem;">
+                        <label style="font-size: 0.8rem; font-weight: 600; color: #334155; display: flex; align-items: center; gap: 0.45rem; cursor: pointer;">
+                            <input type="checkbox" id="enableTimestampsCheck" checked style="accent-color: #4f46e5; width: 16px; height: 16px; cursor: pointer;">
+                            <span>⏱️ Word-level / Phrase Timestamps</span>
+                        </label>
+                        <span style="font-size: 0.72rem; color: #4338ca; background: #eef2ff; border: 1px solid #c7d2fe; padding: 1px 6px; border-radius: 4px; font-weight: 600;">Interactive Seek</span>
                     </div>
 
                     <!-- Batch Upload Pipeline Info Card -->
@@ -964,13 +1106,51 @@
         const previewFileSize = document.getElementById('previewFileSize');
         const audioPlayer = document.getElementById('audioPlayer');
         const uploadModelSelect = document.getElementById('uploadModelSelect');
+        const enableTimestampsCheck = document.getElementById('enableTimestampsCheck');
         const uploadPipelineCard = document.getElementById('uploadPipelineCard');
         const uploadTelemetryHeader = document.getElementById('uploadTelemetryHeader');
         const uploadTelemetryPills = document.getElementById('uploadTelemetryPills');
         const processAudioBtn = document.getElementById('processAudioBtn');
         const uploadResultContent = document.getElementById('uploadResultContent');
 
-        // Dynamic Pipeline Info Renderers
+        // Audio Seeking & Word-Level Timestamps Formatting
+        window.seekAudioTo = function(seconds) {
+            if (!audioPlayer) return;
+            audioPlayer.currentTime = seconds;
+            audioPlayer.play().catch(e => console.log('Playback error:', e));
+            if (filePreviewCard) {
+                filePreviewCard.style.transition = 'box-shadow 0.3s';
+                filePreviewCard.style.boxShadow = '0 0 0 3px rgba(79, 70, 229, 0.45)';
+                setTimeout(() => { filePreviewCard.style.boxShadow = ''; }, 1000);
+            }
+        };
+
+        function formatTimestamps(text) {
+            if (!text) return '';
+            // Replace [MM:SS] or [MM:SS.mmm] with interactive button chip
+            return text.replace(/\[(\d{1,2}):(\d{2})(?:\.(\d+))?\]/g, (match, min, sec, ms) => {
+                const totalSec = parseInt(min, 10) * 60 + parseInt(sec, 10) + (ms ? parseFloat('0.' + ms) : 0);
+                return `<button type="button" class="timestamp-chip" onclick="seekAudioTo(${totalSec})" title="Seek audio to ${min}:${sec}">⏱️ ${min}:${sec}</button>`;
+            });
+        }
+
+        // Dynamic Pipeline Info Renderers & Code Snippets
+        function toggleSnippet(id) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.classList.toggle('open');
+        }
+
+        function copySnippetCode(btn, elementId) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            navigator.clipboard.writeText(el.innerText).then(() => {
+                const orig = btn.innerHTML;
+                btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> <span style="color:#34d399;">Copied!</span>`;
+                setTimeout(() => { btn.innerHTML = orig; }, 1800);
+            });
+        }
+
         function updateLivePipelineInfo() {
             const stt = sttModelSelect.value;
             const llm = llmModelSelect.value;
@@ -981,6 +1161,44 @@
             let sttDesc = stt === 'gemini-3.5-transcribe-live-preview'
                 ? 'Real-time bidirectional streaming via Vertex AI Live API with sub-second utterance delivery.'
                 : 'Enterprise streaming speech recognition via Google Cloud Speech-to-Text V2.';
+
+            let liveCodeSnippet = stt === 'gemini-3.5-transcribe-live-preview' ? 
+`# 1. Connect to Vertex AI Live API WebSocket
+# Endpoint: wss://us-central1-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent
+
+setup_message = {
+    "setup": {
+        "model": "projects/{PROJECT_ID}/locations/us-central1/publishers/google/models/gemini-3.5-transcribe-live-preview",
+        "generationConfig": {"responseModalities": ["TEXT"]}
+    }
+}
+
+# 2. Stream real-time 16kHz PCM audio chunks:
+audio_chunk_message = {
+    "realtimeInput": {
+        "mediaChunks": [{"mimeType": "audio/pcm;rate=16000", "data": base64_pcm_chunk}]
+    }
+}
+
+# 3. Synthesize Diarization & Clinical SOAP on session end:
+soap_response = genai_client.models.generate_content(
+    model="${llm}",
+    contents=["Diarize and synthesize SOAP note from live transcript:\\n\\n" + full_transcript]
+)` : 
+`# Google Cloud Speech-to-Text V2 Streaming Recognizer
+client = speech_v2.SpeechAsyncClient()
+config = speech_v2.RecognitionConfig(
+    auto_decoding_config=speech_v2.AutoDetectDecodingConfig(),
+    model="${stt}",
+    language_codes=["en-US"]
+)
+streaming_config = speech_v2.StreamingRecognitionConfig(config=config, streaming_features={"interim_results": True})
+
+# Downstream SOAP Note Synthesis on session complete:
+soap_response = genai_client.models.generate_content(
+    model="${llm}",
+    contents=["Synthesize clinical SOAP note:\\n\\n" + full_transcript]
+)`;
 
             livePipelineCard.innerHTML = `
                 <div class="pipeline-card-header">
@@ -999,12 +1217,69 @@
                         <strong>Stage 2:</strong> ${llm} (SOAP Synthesis)
                     </span>
                 </div>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-top:0.4rem;">
+                    <button class="code-toggle-btn" onclick="toggleSnippet('liveSnippetBox')">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                        Developer Code Snippet (Python SDK)
+                    </button>
+                </div>
+                <div class="code-snippet-box" id="liveSnippetBox">
+                    <div class="code-snippet-header">
+                        <div class="code-snippet-title">
+                            <span class="code-badge">PYTHON SDK</span>
+                            <span>Live Streaming & SOAP Setup</span>
+                        </div>
+                        <button class="code-copy-btn" onclick="copySnippetCode(this, 'liveCodePre')">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                            Copy Code
+                        </button>
+                    </div>
+                    <pre class="code-pre" id="liveCodePre">${liveCodeSnippet.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+                </div>
             `;
         }
 
         function updateUploadPipelineInfo() {
             const model = uploadModelSelect.value;
             if (model === 'gemini-3.5-transcribe-preview') {
+                const codeSnippet = 
+`from google import genai
+from google.genai import types
+
+# 1. Initialize Vertex AI Client (Google GenAI SDK)
+client = genai.Client(vertexai=True, project="YOUR_PROJECT_ID", location="us-central1")
+
+# 2. Stage 1: Native Acoustic Diarization & ASR with Gemini 3.5 Transcribe
+transcribe_response = client.models.generate_content(
+    model="gemini-3.5-transcribe-preview",
+    contents=[
+        types.Part.from_bytes(data=audio_bytes, mime_type="audio/wav")
+    ],
+    config=types.GenerateContentConfig(
+        audio_transcription_config=types.AudioTranscriptionConfig(
+            diarization=True,            # Native acoustic speaker tags (spk:0, spk:1)
+            language_codes=["en-US"]
+        )
+    )
+)
+diarized_transcript = transcribe_response.text
+
+# 3. Stage 2: Word/Phrase Timestamp Alignment & Clinical SOAP Note Reasoning
+soap_response = client.models.generate_content(
+    model="gemini-3.7-flash",
+    contents=[
+        types.Part.from_text(text=f"""
+You are an expert clinical scribe.
+1. Align verbatim dialogue with [MM:SS] timestamp markers for every speaker turn and key phrase.
+2. Synthesize a complete clinical SOAP note.
+
+Diarized Dialogue:
+{diarized_transcript}
+""")
+    ]
+)
+print(soap_response.text)`;
+
                 uploadPipelineCard.innerHTML = `
                     <div class="pipeline-card-header">
                         <span>⚡ 2-Stage Specialized Pipeline</span>
@@ -1012,7 +1287,7 @@
                     </div>
                     <div style="font-size: 0.78rem; color: #475569; margin-bottom: 0.4rem;">
                         <strong>Stage 1:</strong> Dedicated ASR model performs native acoustic speaker diarization (<code style="background:#e2e8f0; padding:1px 4px; border-radius:3px;">AudioTranscriptionConfig</code>).<br>
-                        <strong>Stage 2:</strong> Gemini 3.7 Flash clinical reasoning synthesizes structured medical SOAP notes from diarized dialogue.
+                        <strong>Stage 2:</strong> Gemini 3.7 Flash clinical reasoning synthesizes [MM:SS] word timestamps and structured medical SOAP notes.
                     </div>
                     <div class="pipeline-flow">
                         <span class="flow-node primary">
@@ -1022,11 +1297,50 @@
                         <span class="flow-arrow">➔</span>
                         <span class="flow-node reasoning">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
-                            <strong>Stage 2:</strong> gemini-3.7-flash (Clinical SOAP)
+                            <strong>Stage 2:</strong> gemini-3.7-flash (Timestamps & SOAP)
                         </span>
+                    </div>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-top:0.4rem;">
+                        <button class="code-toggle-btn" onclick="toggleSnippet('uploadSnippetBox')">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                            Developer Code Snippet (Python SDK)
+                        </button>
+                    </div>
+                    <div class="code-snippet-box" id="uploadSnippetBox">
+                        <div class="code-snippet-header">
+                            <div class="code-snippet-title">
+                                <span class="code-badge">PYTHON SDK</span>
+                                <span>Native Diarization & Timestamp Alignment</span>
+                            </div>
+                            <button class="code-copy-btn" onclick="copySnippetCode(this, 'uploadCodePre')">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                Copy Code
+                            </button>
+                        </div>
+                        <pre class="code-pre" id="uploadCodePre">${codeSnippet.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
                     </div>
                 `;
             } else {
+                const codeSnippet = 
+`from google import genai
+from google.genai import types
+
+# Initialize Vertex AI Client (Google GenAI SDK)
+client = genai.Client(vertexai=True, project="YOUR_PROJECT_ID", location="us-central1")
+
+# Single-Pass Direct Audio Ingestion + Diarization + SOAP Note
+response = client.models.generate_content(
+    model="${model}",
+    contents=[
+        types.Part.from_bytes(data=audio_bytes, mime_type="audio/wav"),
+        """You are an expert clinical scribe. 
+Analyze the consultation audio directly:
+1. Output speaker diarization attributing turns to **Doctor:** and **Patient:**.
+2. Synthesize a complete clinical SOAP note."""
+    ]
+)
+print(response.text)`;
+
                 uploadPipelineCard.innerHTML = `
                     <div class="pipeline-card-header">
                         <span>⚡ Single-Pass Multimodal Pipeline</span>
@@ -1040,6 +1354,25 @@
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
                             <strong>Single Pass:</strong> ${model} (Audio Diarization + SOAP Note Generation)
                         </span>
+                    </div>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-top:0.4rem;">
+                        <button class="code-toggle-btn" onclick="toggleSnippet('uploadSnippetBox')">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                            Developer Code Snippet (Python SDK)
+                        </button>
+                    </div>
+                    <div class="code-snippet-box" id="uploadSnippetBox">
+                        <div class="code-snippet-header">
+                            <div class="code-snippet-title">
+                                <span class="code-badge">PYTHON SDK</span>
+                                <span>Multimodal Direct Ingestion</span>
+                            </div>
+                            <button class="code-copy-btn" onclick="copySnippetCode(this, 'uploadCodePre')">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                Copy Code
+                            </button>
+                        </div>
+                        <pre class="code-pre" id="uploadCodePre">${codeSnippet.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
                     </div>
                 `;
             }
@@ -1343,10 +1676,12 @@
             }
 
             const model = uploadModelSelect.value;
+            const enableTimestamps = enableTimestampsCheck ? enableTimestampsCheck.checked : true;
             const startTime = Date.now();
             const formData = new FormData();
             formData.append('file', selectedAudioFile);
             formData.append('model', model);
+            formData.append('timestamps', enableTimestamps);
 
             processAudioBtn.disabled = true;
             processAudioBtn.style.opacity = '0.7';
@@ -1378,10 +1713,10 @@
                             </div>
                         </div>
                         <div class="stage-item" id="trackStep2">
-                            <span style="font-size: 1rem;">🩺</span>
+                            <span style="font-size: 1rem;">⏱️🩺</span>
                             <div>
-                                <div style="font-weight: 700;">Step 2: Clinical SOAP Note Reasoning</div>
-                                <div style="font-size: 0.75rem; color: #64748b;">Gemini 3.7 Flash will synthesize Subjective, Objective, Assessment, Plan...</div>
+                                <div style="font-weight: 700;">Step 2: Timestamp Alignment & Clinical Reasoning</div>
+                                <div style="font-size: 0.75rem; color: #64748b;">Gemini 3.7 Flash will synthesize word timestamps and SOAP documentation...</div>
                             </div>
                         </div>
                     </div>
@@ -1395,7 +1730,7 @@
                         <div class="square square-3"></div>
                     </div>
                     <div style="font-weight: 700; font-size: 1rem; color: var(--primary);">Direct Multimodal Ingestion</div>
-                    <div style="font-size: 0.85rem; color: #64748b;">Processing raw audio tokens with <strong>${model}</strong> for unified diarization and SOAP summary...</div>
+                    <div style="font-size: 0.85rem; color: #64748b;">Processing raw audio tokens with <strong>${model}</strong> for unified diarization, timestamps, and SOAP summary...</div>
                 </div>`;
             }
 
@@ -1413,6 +1748,7 @@
                 const result = await response.json();
                 const duration = ((Date.now() - startTime) / 1000).toFixed(1);
                 let formatted = result.content.replace(/\*\*(Doctor|Patient|Speaker \d+):\*\*/gi, '\n\n**$1:**');
+                formatted = formatTimestamps(formatted);
                 uploadResultContent.innerHTML = marked.parse(formatted);
 
                 statusText.innerText = `Done (${result.model_used})`;

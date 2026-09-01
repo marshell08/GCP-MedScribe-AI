@@ -179,8 +179,8 @@ async def root():
     return FileResponse(static_dir / "index.html")
 
 
-async def process_audio_upload(file_bytes: bytes, mime_type: str, model_name: str) -> dict:
-    """Process recorded consultation audio with Gemini for Speaker Diarization and SOAP note."""
+async def process_audio_upload(file_bytes: bytes, mime_type: str, model_name: str, enable_timestamps: bool = True) -> dict:
+    """Process recorded consultation audio with Gemini for Speaker Diarization, Word-level Timestamps, and SOAP note."""
     
     # 1. Special handling for native Gemini 3.5 Transcribe Diarization
     if model_name == "gemini-3.5-transcribe-preview":
@@ -224,8 +224,40 @@ async def process_audio_upload(file_bytes: bytes, mime_type: str, model_name: st
                             diarized_lines.append(f"**{speaker_tag}:** {text}")
                     
                     native_transcript = "\n\n".join(diarized_lines)
+
+                    if enable_timestamps:
+                        # Align native diarized dialogue with audio timestamps and generate SOAP note
+                        timestamp_align_prompt = (
+                            "You are an expert medical transcriptionist and clinical scribe.\n"
+                            "The specialized acoustic ASR engine detected the following speaker turns:\n"
+                            f"{native_transcript}\n\n"
+                            "Listen carefully to the audio and produce:\n"
+                            "### 1. Speaker Diarized Transcript (Word/Phrase Timestamps)\n"
+                            "Provide the verbatim transcript with granular timestamps in format `[MM:SS]` (e.g. `**Doctor:** [00:00] Hello Mrs. Martinez, [00:02] good morning. [00:03] What brings you in [00:04] to see me today?`).\n\n"
+                            "---\n\n"
+                            "### 2. Clinical SOAP Summary\n"
+                            "Synthesize a structured clinical SOAP note:\n"
+                            "- **Subjective**: Chief complaint, HPI, symptoms, duration\n"
+                            "- **Objective**: Examination findings, vitals, observations\n"
+                            "- **Assessment**: Primary clinical diagnosis\n"
+                            "- **Plan**: Treatment plan, prescriptions, lifestyle, follow-up"
+                        )
+                        client = get_genai_client(location="global")
+                        align_resp = await client.aio.models.generate_content(
+                            model="gemini-3.7-flash",
+                            contents=[
+                                types.Part.from_bytes(data=file_bytes, mime_type=mime_type),
+                                timestamp_align_prompt
+                            ]
+                        )
+                        if align_resp and align_resp.text:
+                            return {
+                                "status": "success",
+                                "model_used": "gemini-3.5-transcribe-preview (Native Diarization + Word Timestamps) + gemini-3.7-flash",
+                                "content": align_resp.text
+                            }
                     
-                    # Generate SOAP note using Gemini Flash from the native diarized transcript
+                    # If timestamps not requested, generate SOAP note directly from native diarized transcript
                     soap_note = await generate_soap_summary(
                         llm_model="gemini-3.7-flash", 
                         full_text=native_transcript,
@@ -250,14 +282,19 @@ async def process_audio_upload(file_bytes: bytes, mime_type: str, model_name: st
             logger.warning(f"Native transcribe exception: {native_err}. Falling back to standard pipeline...")
 
     # 2. Multimodal LLM pipeline
+    ts_instr = (
+        "Include granular word/phrase-level timestamps in format `[MM:SS]` (e.g. `**Doctor:** [00:00] Hello Mrs. Martinez, [00:02] good morning...`) for every utterance.\n"
+        if enable_timestamps else ""
+    )
     prompt = (
         "You are an expert AI clinical documentation assistant.\n"
         "Listen carefully to this recorded medical consultation and generate the following structured outputs:\n\n"
         "### 1. Speaker Diarized Transcript\n"
-        "Transcribe the entire consultation verbatim, accurately attributing each speaker turn strictly to 'Doctor' or 'Patient' based on acoustic speaker turns and conversational context.\n"
+        f"Transcribe the entire consultation verbatim, accurately attributing each speaker turn strictly to 'Doctor' or 'Patient'.\n"
+        f"{ts_instr}"
         "Format each turn with clean paragraph breaks:\n"
-        "**Doctor:** [Doctor statement]\n\n"
-        "**Patient:** [Patient statement]\n\n"
+        "**Doctor:** [00:00] [Doctor statement]\n\n"
+        "**Patient:** [00:05] [Patient statement]\n\n"
         "### 2. Clinical SOAP Summary\n"
         "Synthesize a professional, structured clinical SOAP note:\n"
         "- **Subjective**: Chief complaint, history of present illness (HPI), symptoms, duration, and patient remarks.\n"
@@ -324,9 +361,10 @@ async def process_audio_upload(file_bytes: bytes, mime_type: str, model_name: st
 @app.post("/api/upload-audio")
 async def upload_audio_endpoint(
     file: UploadFile = File(...),
-    model: str = Form("gemini-3.7-flash")
+    model: str = Form("gemini-3.7-flash"),
+    timestamps: bool = Form(True)
 ):
-    """Receive uploaded medical audio file and return Diarized Transcript & SOAP Note."""
+    """Receive uploaded medical audio file and return Diarized Transcript with Word-Level Timestamps & SOAP Note."""
     try:
         content = await file.read()
         if not content or len(content) == 0:
@@ -348,8 +386,13 @@ async def upload_audio_endpoint(
         elif filename.endswith(".wav"):
             mime_type = "audio/wav"
 
-        result = await process_audio_upload(content, mime_type, model)
-        return JSONResponse(content=result)
+        result = await process_audio_upload(
+            file_bytes=content,
+            mime_type=mime_type,
+            model_name=model,
+            enable_timestamps=timestamps
+        )
+        return JSONResponse(status_code=200, content=result)
     except HTTPException:
         raise
     except Exception as e:
